@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>调度监控站 | BUPT Admin</title>
+    <!-- Wow aesthetics: Sci-fi Dashboard layout -->
+    <style>
+        body { margin: 0; font-family: 'Inter', sans-serif; background: #080c14; color: white; min-height: 100vh; padding: 40px; box-sizing: border-box;}
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 30px; }
+        h1 { margin: 0; font-size: 28px; background: linear-gradient(90deg, #ff8a00, #e52e71); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .queue-hud { display: flex; gap: 20px; }
+        .hud-box { padding: 15px 25px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
+        .hud-box span { display: block; font-size: 28px; font-weight: bold; color: #4facfe; }
+        .hud-box label { font-size: 13px; color: #a1b0cb; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
+        .pile-card { background: rgba(255,255,255,0.02); border-radius: 16px; padding: 25px; border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; transition: transform 0.3s; }
+        .pile-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05)}
+        .pile-card.charging { border-color: #00e676; box-shadow: 0 0 20px rgba(0,230,118,0.1); background: rgba(0, 230, 118, 0.05);}
+        
+        .pile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .pile-id { font-size: 24px; font-weight: bold; color: #fff; }
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; letter-spacing: 1px;}
+        .bg-idle { background: rgba(255,255,255,0.1); color: #aaa; }
+        .bg-charging { background: rgba(0,230,118,0.2); color: #00e676; box-shadow: 0 0 10px rgba(0,230,118,0.3);}
+        
+        .soc-bar-bg { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin: 15px 0; }
+        .soc-bar-fill { height: 100%; background: linear-gradient(90deg, #00f2fe, #4facfe); width: 0%; transition: width 0.3s linear; }
+        
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: #a1b0cb; }
+        .meta-val { color: #fff; font-weight: 600; font-size: 15px; margin-top:4px; display:block;}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>调度监控枢纽中心 / ADMIN</h1>
+        <div class="queue-hud">
+            <div class="hud-box">
+                <span id="fq">0</span>
+                <label>快充滞留数</label>
+            </div>
+            <div class="hud-box">
+                <span id="sq">0</span>
+                <label>慢充滞留数</label>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 这里的容器将塞进所有的物理充电桩卡片 -->
+    <div class="grid" id="piles">
+        <!-- JS 长轮询注入 -->
+    </div>
+
+    <script>
+        async function poll() {
+            try {
+                // 读取后端开放的增量一系统探针
+                const res = await fetch('/api/system/dump');
+                const data = await res.json();
+                
+                // 更替顶部等候区的动态大数字
+                document.getElementById('fq').innerText = data.fast_queue_count;
+                document.getElementById('sq').innerText = data.slow_queue_count;
+                
+                const container = document.getElementById('piles');
+                container.innerHTML = '';
+                
+                // 构建每台网格卡片
+                data.piles.forEach(p => {
+                    const isC = p.status === 'CHARGING';
+                    const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
+                    const card = document.createElement('div');
+                    card.className = 'pile-card ' + (isC ? 'charging' : '');
+                    
+                    card.innerHTML = `
+                        <div class="pile-header">
+                            <div class="pile-id">${p.pile_id} <span style="font-size:12px;color:#aaa;background:rgba(255,255,255,0.1);padding:3px 6px;border-radius:4px;margin-left:8px;">${p.type} 规格</span></div>
+                            <div class="status-badge ${isC?'bg-charging':'bg-idle'}">${isC ? '🟢 供电执行侧' : '✖ 脱机游离中'}</div>
+                        </div>
+                        
+                        ${isC ? `
+                            <div class="meta-grid">
+                                <div>当前受电节点<br><span class="meta-val">${p.vehicle_id}</span></div>
+                                <div>目标能量刻度<br><span class="meta-val" style="color:#ff8a00">${(p.target_soc*100).toFixed(0)}%</span></div>
+                            </div>
+                            <div class="soc-bar-bg">
+                                <div class="soc-bar-fill" style="width: ${socPercent}%"></div>
+                            </div>
+                            <div style="text-align: right; font-size:14px; font-weight:bold; color: #4facfe">${socPercent}%</div>
+                        ` : `
+                            <div style="color: #666; font-size: 14px; margin-top:20px; font-weight:500;">接口空置，等待网关唤醒...</div>
+                        `}
+                    `;
+                    container.appendChild(card);
+                });
+            } catch(e) {
+                // Mute errors on poll failing
+            }
+        }
+        
+        // 构建 1 秒级别的超级轮询，实现无缝的大屏雷达效果
+        setInterval(poll, 1000);
+        poll();
+    </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>车辆端 | BUPT 智能充电系统</title>
+    <!-- Wow aesthetics: Sci-Fi / Cyber Glassmorphism -->
+    <style>
+        body { margin: 0; font-family: 'Inter', sans-serif; background: radial-gradient(circle at top, #111a24, #05080f); color: white; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .glass-panel { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 40px; width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+        h1 { margin-top: 0; font-size: 24px; text-align: center; background: linear-gradient(90deg, #00f2fe, #4facfe); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 14px; margin-bottom: 6px; color: #a1b0cb; }
+        input, select { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: white; font-size: 16px; outline: none; transition: border 0.3s; }
+        input:focus, select:focus { border-color: #4facfe; }
+        button { width: 100%; padding: 14px; background: linear-gradient(90deg, #4facfe, #00f2fe); border: none; border-radius: 8px; color: #000; font-weight: bold; font-size: 16px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,242,254,0.3); }
+        .console { margin-top: 20px; padding: 15px; background: #000; border-radius: 8px; font-family: monospace; font-size: 13px; color: #4facfe; white-space: pre-wrap; height: 100px; overflow-y: auto; border: 1px solid rgba(0,242,254,0.3); }
+    </style>
+</head>
+<body>
+    <div class="glass-panel">
+        <h1>发起充电请求</h1>
+        <div class="input-group">
+            <label>车牌标识 (Vehicle ID)</label>
+            <input type="text" id="vid" placeholder="例如：京A88888" value="京A88888">
+        </div>
+        <div class="input-group">
+            <label>充电需求模式</label>
+            <select id="type">
+                <option value="Fast">快充 (Fast) - 高优</option>
+                <option value="Slow">慢充 (Slow) - 常规</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 15px;">
+            <div class="input-group" style="flex:1;">
+                <label>目前表显SOC量</label>
+                <input type="number" id="csoc" step="0.1" min="0" max="0.9" value="0.2">
+            </div>
+            <div class="input-group" style="flex:1;">
+                <label>目标拔回SOC量</label>
+                <input type="number" id="tsoc" step="0.1" min="0.1" max="1.0" value="0.9">
+            </div>
+        </div>
+        <button onclick="submitRequest()">发送并列入调度序列</button>
+        <div class="console" id="log">// 客户端系统已就绪...</div>
+    </div>
+
+    <script>
+        function log(msg) {
+            const el = document.getElementById('log');
+            el.innerHTML += '\n> ' + msg;
+            el.scrollTop = el.scrollHeight; // Auto scroll to bottom
+        }
+        async function submitRequest() {
+            const payload = {
+                vehicle_id: document.getElementById('vid').value,
+                charge_type: document.getElementById('type').value,
+                current_soc: parseFloat(document.getElementById('csoc').value),
+                target_soc: parseFloat(document.getElementById('tsoc').value)
+            };
+            log("正在发起车辆端调度握手...");
+            try {
+                const res = await fetch('/api/requests/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                
+                // 处理满载拒绝
+                if(data.status === 'rejected') {
+                    log(`<span style="color:#ff4b4b">${data.message}</span>`);
+                } else {
+                    // 处理派发或排队
+                    log(`<span style="color:#00e676">${data.message} ${data.assigned_pile ? '🟢 连接至接口位: '+data.assigned_pile : '🟡 顺位号码: '+data.queue_position}</span>`);
+                }
+            } catch(e) {
+                log('<span style="color:#ff4b4b">服务器离线，系统拦截了握手。</span>');
+            }
+        }
+    </script>
+</body>
+</html>
