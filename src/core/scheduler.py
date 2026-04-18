@@ -174,14 +174,11 @@ class FIFOScheduler:
                     bill = await self._finish_charging(
                         pile, current_vtime, status="INTERRUPTED")
 
-                    # 桩空出后尝试调度队列中的车辆
-                    await self.dispatch_from_queues(current_vtime)
-
                     return {
                         "status": "success",
                         "message": "已中断充电并生成账单",
-                        "charge_kwh": bill['charge_kwh'] if bill else 0.0,
-                        "electricity_fee": bill['electricity_fee'] if bill else 0.0,
+                        "total_power": bill['total_power'] if bill else 0.0,
+                        "power_fee": bill['power_fee'] if bill else 0.0,
                         "service_fee": bill['service_fee'] if bill else 0.0,
                         "total_fee": bill['total_fee'] if bill else 0.0,
                     }
@@ -231,20 +228,19 @@ class FIFOScheduler:
         async with AsyncSessionLocal() as session:
             order = await session.get(ChargeOrder, pile.db_order_id)
             if order:
-                bill = self.billing.generate_bill({
-                    'start_soc': order.start_soc,
-                    'end_soc': end_soc,
-                    'started_at': order.started_at,
-                    'finished_at': current_vtime,
-                })
+                # SOC 转换为充电度数
+                total_kwh = self.billing.soc_to_kwh(order.start_soc, end_soc)
+
+                # 设置度数并调用双参数计费接口
+                self.billing._total_kwh = total_kwh
+                bill = self.billing.calculate_fee(
+                    order.started_at, current_vtime)
 
                 order.status = status
                 order.finished_at = current_vtime
-                order.end_soc = end_soc
-                order.charge_kwh = bill['charge_kwh']
-                order.electricity_fee = bill['electricity_fee']
+                order.total_power = bill['total_power']
+                order.power_fee = bill['power_fee']
                 order.service_fee = bill['service_fee']
-                order.timeout_fee = 0.0
                 order.total_fee = bill['total_fee']
                 await session.commit()
                 bill_data = bill
@@ -311,6 +307,3 @@ class FIFOScheduler:
 
                             await self._finish_charging(
                                 pile, current_vtime, status="COMPLETED")
-
-                # 每次有车走空出位置时检查队列看能否接人
-                await self.dispatch_from_queues(current_vtime)

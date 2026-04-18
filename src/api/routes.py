@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from src.api.schemas import (
     ChargeRequest, ChargeResponse, SystemStatusResponse,
-    BillResponse, CancelResponse, StopResponse, FeeDetailItem,
+    BillResponse, CancelResponse, StopResponse, FeeDetail,
 )
 from src.models.database import AsyncSessionLocal
 from src.models.models import ChargeOrder
@@ -35,13 +35,13 @@ async def get_bill(order_id: int, request: Request):
             raise HTTPException(status_code=404, detail="订单不存在")
 
     # 对已结算的订单，重新计算分时明细用于展示
-    fee_detail = None
+    detail = None
     if (order.started_at is not None and order.finished_at is not None
-            and order.charge_kwh is not None and order.charge_kwh > 0):
+            and order.total_power is not None and order.total_power > 0):
         billing: BillingEngine = request.app.state.scheduler.billing
-        fee_result = billing.calculate_fee(
-            order.started_at, order.finished_at, order.charge_kwh)
-        fee_detail = [FeeDetailItem(**d) for d in fee_result['detail']]
+        billing._total_kwh = order.total_power
+        fee_result = billing.calculate_fee(order.started_at, order.finished_at)
+        detail = FeeDetail(**fee_result['detail'])
 
     return BillResponse(
         order_id=order.id,
@@ -50,18 +50,16 @@ async def get_bill(order_id: int, request: Request):
         charge_type=order.charge_type,
         status=order.status,
         start_soc=order.start_soc,
-        end_soc=order.end_soc,
         target_soc=order.target_soc,
-        charge_kwh=order.charge_kwh,
-        electricity_fee=order.electricity_fee,
+        total_power=order.total_power,
+        power_fee=order.power_fee,
         service_fee=order.service_fee,
-        timeout_fee=order.timeout_fee,
         total_fee=order.total_fee,
         created_at=order.created_at,
         started_at=order.started_at,
         finished_at=order.finished_at,
         left_at=order.left_at,
-        fee_detail=fee_detail,
+        detail=detail,
     )
 
 

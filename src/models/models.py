@@ -23,9 +23,7 @@ class ChargeOrder(Base):
     left_at = Column(DateTime, nullable=True)      # 车辆实际离开时间（用于超时计算）
 
     # 充电结果与计费字段
-    end_soc = Column(Float, nullable=True)          # 充电结束时的实际电量
-    charge_kwh = Column(Float, nullable=True)       # 本次充入的总度数（千瓦时）
-    electricity_fee = Column(Float, nullable=True)  # 分时阶梯电费（元）
+    total_power = Column(Float, nullable=True)      # 总充电度数（千瓦时）
+    power_fee = Column(Float, nullable=True)        # 分时阶梯电费（元）
     service_fee = Column(Float, nullable=True)      # 充电服务费（元）
-    timeout_fee = Column(Float, default=0.0)        # 超时占位费（元）
     total_fee = Column(Float, nullable=True)        # 最终应付总费用（元）

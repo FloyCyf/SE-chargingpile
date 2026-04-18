@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 
@@ -27,20 +27,18 @@ class PileStatus(BaseModel):
 
 
 class SystemStatusResponse(BaseModel):
-    piles: List[PileStatus]
+    piles: list[PileStatus]
     fast_queue_count: int
     slow_queue_count: int
 
 
 # ---- 计费与状态操作相关模型 ----
 
-class FeeDetailItem(BaseModel):
-    """分时计费明细条目"""
-    period: str    # 波峰 / 波平 / 波谷
-    rate: float    # 该时段费率（元/度）
-    minutes: float # 该时段充电时长（分钟）
-    kwh: float     # 该时段充入度数
-    fee: float     # 该时段费用（元）
+class FeeDetail(BaseModel):
+    """分时计费明细"""
+    peak_kwh: float = 0.0    # 波峰充电度数
+    flat_kwh: float = 0.0    # 波平充电度数
+    valley_kwh: float = 0.0  # 波谷充电度数
 
 
 class BillResponse(BaseModel):
@@ -52,21 +50,19 @@ class BillResponse(BaseModel):
     status: str
 
     start_soc: float
-    end_soc: Optional[float] = None
     target_soc: float
-    charge_kwh: Optional[float] = None
+    total_power: Optional[float] = None    # 总充电度数
 
-    electricity_fee: Optional[float] = None
-    service_fee: Optional[float] = None
-    timeout_fee: Optional[float] = None
-    total_fee: Optional[float] = None
+    power_fee: Optional[float] = None      # 分时电费
+    service_fee: Optional[float] = None    # 服务费
+    total_fee: Optional[float] = None      # 总费用
 
     created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     left_at: Optional[datetime] = None
 
-    fee_detail: Optional[List[FeeDetailItem]] = None
+    detail: Optional[FeeDetail] = None     # 分时明细
 
 
 class CancelResponse(BaseModel):
@@ -79,7 +75,7 @@ class StopResponse(BaseModel):
     """主动停止充电结果"""
     status: str
     message: str
-    charge_kwh: Optional[float] = None
-    electricity_fee: Optional[float] = None
-    service_fee: Optional[float] = None
-    total_fee: Optional[float] = None
+    total_power: Optional[float] = None    # 总充电度数
+    power_fee: Optional[float] = None      # 分时电费
+    service_fee: Optional[float] = None    # 服务费
+    total_fee: Optional[float] = None      # 总费用
