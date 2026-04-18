@@ -9,3 +9,26 @@ simulation:
   virtual_minutes_per_real_second: 1   # 时间压缩倍率：1现实秒对应多少虚拟分钟
   fast_charge_percent_per_min: 0.01    # 快充虚拟每分钟充电比例（1%）
   slow_charge_percent_per_min: 0.005   # 慢充虚拟每分钟充电比例（0.5%）
+
+# 计费参数配置
+# 对应需求规格说明书 4.3 节
+billing:
+  battery_capacity_kwh: 60.0   # 标准电池容量（千瓦时），用于 SOC 转换度数
+  service_fee_rate: 0.80       # 充电服务费（元/度），全天固定
+  timeout_fee_rate: 1.00       # 超时占位费（元/分钟）
+  free_parking_minutes: 30     # 充满后免费停留时间（分钟）
+
+  # 分时阶梯电价配置
+  electricity_rates:
+    peak:
+      label: "波峰"
+      rate: 1.00               # 元/度
+      periods: ["10:00-15:00", "18:00-21:00"]
+    flat:
+      label: "波平"
+      rate: 0.70               # 元/度
+      periods: ["07:00-10:00", "15:00-18:00", "21:00-23:00"]
+    valley:
+      label: "波谷"
+      rate: 0.40               # 元/度
+      periods: ["23:00-07:00"]
