@@ -13,7 +13,7 @@ class ChargeOrder(Base):
     start_soc = Column(Float, nullable=False)
     target_soc = Column(Float, nullable=False)
 
-    # 状态机约束：'QUEUING', 'CHARGING', 'COMPLETED'
+    # 状态机：QUEUING -> CHARGING -> COMPLETED / INTERRUPTED / CANCELLED
     status = Column(String(20), default='QUEUING')
 
     # 各个里程碑时间点（全量使用虚拟相对时钟记录）
