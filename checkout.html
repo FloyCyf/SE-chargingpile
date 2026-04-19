@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>充电订单结算</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        
+        .card {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+        
+        .btn-primary {
+            background-color: #165DFF;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0E42C2;
+            transform: translateY(-1px);
+        }
+        
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-success {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+        }
+        
+        .badge-warning {
+            background-color: #FFF3E0;
+            color: #E65100;
+        }
+
+        .badge-fast {
+            background-color: #FFF7ED;
+            color: #EA580C;
+        }
+
+        .badge-slow {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">充电订单结算</h1>
+            <p class="text-gray-500">感谢使用智能充电服务</p>
+        </div>
+        
+        <div class="card bg-white rounded-xl p-8">
+            <div id="loading" class="text-center py-16">
+                <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
+                <p class="mt-4 text-gray-500">加载中...</p>
+            </div>
+            
+            <div id="order-details" class="hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-800">订单详情</h2>
+                        <p class="text-sm text-gray-500" id="order-time">2026-04-19 14:30:00</p>
+                    </div>
+                    <span id="charge-type-badge" class="badge badge-fast">⚡ 快充</span>
+                </div>
+                
+                <div class="space-y-4 mb-8">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">订单编号</span>
+                        <span class="font-medium text-gray-800" id="order-id">ORD20260419001</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电桩编号</span>
+                        <span class="font-medium text-gray-800" id="pile-id">P001</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电总电量</span>
+                        <span class="font-medium text-gray-800" id="electricity">35.50 kWh</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电时长</span>
+                        <span class="font-medium text-gray-800" id="duration">01:10:30</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电启动时间</span>
+                        <span class="font-medium text-gray-800" id="start-time">2026-04-19 13:20:00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电结束时间</span>
+                        <span class="font-medium text-gray-800" id="end-time">2026-04-19 14:30:30</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">充电电费</span>
+                        <span class="font-medium text-gray-800" id="electricity-fee">¥28.40</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">服务费用</span>
+                        <span class="font-medium text-gray-800" id="service-fee">¥3.55</span>
+                    </div>
+                </div>
+                
+                <div class="border-t border-gray-200 pt-4 mb-6">
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-semibold text-gray-800">总费用</span>
+                        <span class="text-2xl font-bold text-blue-600" id="total-fee">¥31.95</span>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-gray-500">支付状态:</span>
+                        <span id="payment-status" class="badge badge-warning">待支付</span>
+                    </div>
+                </div>
+                
+                <button id="pay-button" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                    确认支付
+                </button>
+            </div>
+            
+            <div id="error" class="hidden text-center py-16">
+                <div class="text-red-500 mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <p class="text-gray-500" id="error-message">订单不存在</p>
+                <button id="retry-button" class="mt-4 btn-primary px-6 py-2 text-white rounded-lg font-medium">
+                    重试
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const mockOrderData = {
+            order_id: 'ORD20260419001',
+            pile_id: 'P001',
+            electricity: 35.50,
+            duration: 4230,
+            start_time: '2026-04-19T13:20:00',
+            end_time: '2026-04-19T14:30:30',
+            electricity_fee: 28.40,
+            service_fee: 3.55,
+            total_fee: 31.95,
+            payment_status: 'PENDING'
+        };
+
+        function getOrderId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('order_id') || 'ORD000001';
+        }
+
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        async function fetchOrderDetails() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('order-details').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            const order = mockOrderData;
+            
+            document.getElementById('order-id').textContent = order.order_id;
+            document.getElementById('pile-id').textContent = order.pile_id;
+            document.getElementById('electricity').textContent = `${order.electricity.toFixed(2)} kWh`;
+            document.getElementById('duration').textContent = formatDuration(order.duration);
+            document.getElementById('start-time').textContent = formatDateTime(order.start_time);
+            document.getElementById('end-time').textContent = formatDateTime(order.end_time);
+            document.getElementById('electricity-fee').textContent = `¥${order.electricity_fee.toFixed(2)}`;
+            document.getElementById('service-fee').textContent = `¥${order.service_fee.toFixed(2)}`;
+            document.getElementById('total-fee').textContent = `¥${order.total_fee.toFixed(2)}`;
+            document.getElementById('order-time').textContent = formatDateTime(order.start_time);
+            
+            const chargeTypeBadge = document.getElementById('charge-type-badge');
+            if (order.pile_id.startsWith('P001') || order.pile_id.startsWith('P002') || order.pile_id.startsWith('P003')) {
+                chargeTypeBadge.className = 'badge badge-fast';
+                chargeTypeBadge.textContent = '⚡ 快充';
+            } else {
+                chargeTypeBadge.className = 'badge badge-slow';
+                chargeTypeBadge.textContent = '🔌 慢充';
+            }
+            
+            const paymentStatus = document.getElementById('payment-status');
+            if (order.payment_status === 'PAID') {
+                paymentStatus.className = 'badge badge-success';
+                paymentStatus.textContent = '已支付';
+                document.getElementById('pay-button').disabled = true;
+                document.getElementById('pay-button').textContent = '已支付';
+                document.getElementById('pay-button').classList.add('opacity-50');
+            } else {
+                paymentStatus.className = 'badge badge-warning';
+                paymentStatus.textContent = '待支付';
+            }
+            
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('order-details').classList.remove('hidden');
+        }
+
+        document.getElementById('pay-button').addEventListener('click', async function() {
+            const orderId = getOrderId();
+            
+            try {
+                mockOrderData.payment_status = 'PAID';
+                alert('支付成功！');
+                window.location.reload();
+            } catch (error) {
+                console.error('Payment error:', error);
+                alert('支付失败，请重试');
+            }
+        });
+
+        document.getElementById('retry-button').addEventListener('click', fetchOrderDetails);
+
+        window.onload = fetchOrderDetails;
+    </script>
+</body>
+</html>

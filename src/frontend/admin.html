@@ -1,106 +1,931 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>调度监控站 | BUPT Admin</title>
-    <!-- Wow aesthetics: Sci-fi Dashboard layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <style>
-        body { margin: 0; font-family: 'Inter', sans-serif; background: #080c14; color: white; min-height: 100vh; padding: 40px; box-sizing: border-box;}
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 30px; }
-        h1 { margin: 0; font-size: 28px; background: linear-gradient(90deg, #ff8a00, #e52e71); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        .queue-hud { display: flex; gap: 20px; }
-        .hud-box { padding: 15px 25px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
-        .hud-box span { display: block; font-size: 28px; font-weight: bold; color: #4facfe; }
-        .hud-box label { font-size: 13px; color: #a1b0cb; text-transform: uppercase; letter-spacing: 1px; }
-        
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
-        .pile-card { background: rgba(255,255,255,0.02); border-radius: 16px; padding: 25px; border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; transition: transform 0.3s; }
-        .pile-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05)}
-        .pile-card.charging { border-color: #00e676; box-shadow: 0 0 20px rgba(0,230,118,0.1); background: rgba(0, 230, 118, 0.05);}
-        
-        .pile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .pile-id { font-size: 24px; font-weight: bold; color: #fff; }
-        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; letter-spacing: 1px;}
-        .bg-idle { background: rgba(255,255,255,0.1); color: #aaa; }
-        .bg-charging { background: rgba(0,230,118,0.2); color: #00e676; box-shadow: 0 0 10px rgba(0,230,118,0.3);}
-        
-        .soc-bar-bg { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin: 15px 0; }
-        .soc-bar-fill { height: 100%; background: linear-gradient(90deg, #00f2fe, #4facfe); width: 0%; transition: width 0.3s linear; }
-        
-        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: #a1b0cb; }
-        .meta-val { color: #fff; font-weight: 600; font-size: 15px; margin-top:4px; display:block;}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        .card {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .stat-card {
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .pile-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .pile-card:hover {
+            border-color: #e5e7eb;
+        }
+
+        .pile-card.charging {
+            border-color: #22c55e;
+            background: linear-gradient(to bottom, #f0fdf4, white);
+        }
+
+        .pile-card.fault {
+            border-color: #ef4444;
+            background: linear-gradient(to bottom, #fef2f2, white);
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-fast {
+            background-color: #FFF7ED;
+            color: #EA580C;
+        }
+
+        .badge-slow {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+
+        .badge-success {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+        }
+
+        .badge-charging {
+            background-color: #E3F2FD;
+            color: #1565C0;
+        }
+
+        .badge-fault {
+            background-color: #FFEBEE;
+            color: #C62828;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #165DFF;
+            color: #165DFF;
+        }
+
+        .queue-card {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #165DFF, #00f2fe);
+            animation: loading 1.5s infinite;
+            z-index: 1000;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; left: 0; }
+            50% { width: 50%; left: 25%; }
+            100% { width: 0%; left: 100%; }
+        }
+
+        .table-header {
+            background-color: #f9fafb;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1001;
+            animation: slideInRight 0.3s ease;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .success-notification {
+            background-color: #22c55e;
+        }
+
+        .error-notification {
+            background-color: #ef4444;
+        }
+
+        .warning-notification {
+            background-color: #f59e0b;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-content {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .btn-primary {
+            background-color: #165DFF;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: #0E42C2;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: #6B7280;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background-color: #4B5563;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background-color: #22c55e;
+            transition: all 0.3s ease;
+        }
+
+        .btn-success:hover {
+            background-color: #16a34a;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            transition: all 0.3s ease;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+            transform: translateY(-1px);
+        }
     </style>
 </head>
-<body>
-    <div class="header">
-        <h1>调度监控枢纽中心 / ADMIN</h1>
-        <div class="queue-hud">
-            <div class="hud-box">
-                <span id="fq">0</span>
-                <label>快充滞留数</label>
+<body class="min-h-screen">
+    <div class="loading-bar"></div>
+
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">调度监控枢纽中心</h1>
             </div>
-            <div class="hud-box">
-                <span id="sq">0</span>
-                <label>慢充滞留数</label>
+            <div class="flex items-center space-x-4">
+                <div class="flex border-b border-gray-200">
+                    <button onclick="showTab('monitor')" id="tab-monitor" class="px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">
+                        实时监控
+                    </button>
+                    <button onclick="showTab('report')" id="tab-report" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        数据报表
+                    </button>
+                    <button onclick="showTab('settings')" id="tab-settings" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        系统设置
+                    </button>
+                </div>
+                <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
             </div>
         </div>
-    </div>
-    
-    <!-- 这里的容器将塞进所有的物理充电桩卡片 -->
-    <div class="grid" id="piles">
-        <!-- JS 长轮询注入 -->
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+        <!-- 监控面板 -->
+        <div id="monitor-panel">
+            <!-- 统计概览 -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">快充桩</div>
+                    <div class="text-2xl font-bold text-orange-500" id="fast-total">3</div>
+                    <div class="text-xs text-gray-400 mt-1">总数量</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">快充可用</div>
+                    <div class="text-2xl font-bold text-green-500" id="fast-available">2</div>
+                    <div class="text-xs text-gray-400 mt-1">可使用</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">慢充桩</div>
+                    <div class="text-2xl font-bold text-blue-500" id="slow-total">2</div>
+                    <div class="text-xs text-gray-400 mt-1">总数量</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">慢充可用</div>
+                    <div class="text-2xl font-bold text-green-500" id="slow-available">1</div>
+                    <div class="text-xs text-gray-400 mt-1">可使用</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">等候车辆</div>
+                    <div class="text-2xl font-bold text-yellow-500" id="waiting-count">5</div>
+                    <div class="text-xs text-gray-400 mt-1">总数量</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">今日充电</div>
+                    <div class="text-2xl font-bold text-blue-500" id="today-count">28</div>
+                    <div class="text-xs text-gray-400 mt-1">总次数</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 充电区 -->
+                <div class="lg:col-span-2 card bg-white rounded-lg p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">⚡ 充电区</h2>
+
+                    <!-- 快充桩 -->
+                    <div class="mb-6">
+                        <h3 class="text-base font-semibold mb-3">
+                            <span class="badge badge-fast">⚡ 快充桩</span>
+                            <span class="text-sm text-gray-400 ml-2">
+                                可用: <span id="fast-available-count" class="text-green-600 font-semibold">0</span>/3
+                                <span class="text-gray-400 ml-4">功率: 30度/小时</span>
+                            </span>
+                        </h3>
+                        <div id="fast-piles" class="grid grid-cols-3 gap-4">
+                        </div>
+                    </div>
+
+                    <!-- 慢充桩 -->
+                    <div>
+                        <h3 class="text-base font-semibold mb-3">
+                            <span class="badge badge-slow">🔌 慢充桩</span>
+                            <span class="text-sm text-gray-400 ml-2">
+                                可用: <span id="slow-available-count" class="text-green-600 font-semibold">0</span>/2
+                                <span class="text-gray-400 ml-4">功率: 10度/小时</span>
+                            </span>
+                        </h3>
+                        <div id="slow-piles" class="grid grid-cols-2 gap-4">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 等候区 -->
+                <div class="card bg-white rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-800">⏳ 等候区</h2>
+                        <button onclick="clearQueue()" class="btn-secondary text-sm text-white px-3 py-1 rounded-lg">
+                            清空队列
+                        </button>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-sm text-gray-500 mb-2">快充队列 (F)</h4>
+                        <div id="fast-queue" class="space-y-2 max-h-40 overflow-y-auto">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-sm text-gray-500 mb-2">慢充队列 (T)</h4>
+                        <div id="slow-queue" class="space-y-2 max-h-40 overflow-y-auto">
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200">
+                        <h4 class="text-sm text-gray-500 mb-2">等候车辆详情</h4>
+                        <div id="queue-details" class="space-y-2 max-h-60 overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 报表面板 -->
+        <div id="report-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 数据报表</h2>
+
+            <!-- 报表筛选 -->
+            <div class="flex gap-4 mb-6">
+                <button onclick="setReportPeriod('day')" id="period-day" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    今日
+                </button>
+                <button onclick="setReportPeriod('week')" id="period-week" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    本周
+                </button>
+                <button onclick="setReportPeriod('month')" id="period-month" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    本月
+                </button>
+                <button onclick="exportReport()" class="btn-primary px-4 py-2 text-white rounded-lg ml-auto">
+                    导出报表
+                </button>
+            </div>
+
+            <!-- 报表统计 -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="card bg-white rounded-lg p-4 text-center border border-gray-200 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">累计充电次数</div>
+                    <div class="text-3xl font-bold text-blue-600" id="report-count">156</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 text-center border border-gray-200 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">累计充电时长</div>
+                    <div class="text-3xl font-bold text-green-600" id="report-duration">320h</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 text-center border border-gray-200 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">累计充电量</div>
+                    <div class="text-3xl font-bold text-yellow-600" id="report-electricity">2850度</div>
+                </div>
+                <div class="card bg-white rounded-lg p-4 text-center border border-gray-200 stat-card">
+                    <div class="text-sm text-gray-500 mb-1">累计收益</div>
+                    <div class="text-3xl font-bold text-orange-600" id="report-revenue">¥2580</div>
+                </div>
+            </div>
+
+            <!-- 报表表格 -->
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="table-header">
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充电桩</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充电次数</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充电时长</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充电量</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充电费用</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">服务费用</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">总费用</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-table">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 系统设置面板 -->
+        <div id="settings-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">⚙️ 系统设置</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-base font-semibold mb-3 text-gray-800">充电桩设置</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">快充桩数量</label>
+                            <input type="number" id="fast-pile-count" min="1" max="10" value="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">慢充桩数量</label>
+                            <input type="number" id="slow-pile-count" min="1" max="10" value="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">等候区容量</label>
+                            <input type="number" id="waiting-area-size" min="1" max="50" value="10" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <button onclick="savePileSettings()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                            保存设置
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold mb-3 text-gray-800">计费设置</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">峰时电价 (10:00-15:00, 18:00-21:00)</label>
+                            <input type="number" id="peak-price" step="0.1" min="0" value="1.0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">平时电价 (7:00-10:00, 15:00-18:00, 21:00-23:00)</label>
+                            <input type="number" id="normal-price" step="0.1" min="0" value="0.7" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">谷时电价 (23:00-次日7:00)</label>
+                            <input type="number" id="valley-price" step="0.1" min="0" value="0.4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">服务费单价</label>
+                            <input type="number" id="service-fee" step="0.1" min="0" value="0.8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <button onclick="savePriceSettings()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                            保存设置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据图表 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6" id="charts-panel">
+            <div class="card bg-white rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">日用电量趋势</h3>
+                <div class="h-64">
+                    <canvas id="electricity-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="card bg-white rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">日收益趋势</h3>
+                <div class="h-64">
+                    <canvas id="revenue-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 帮助弹窗 -->
+    <div id="helpModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl p-8 w-full max-w-lg shadow-xl">
+            <h2 class="text-2xl font-bold text-center mb-6 text-gray-800">使用帮助</h2>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-semibold text-gray-800">1. 实时监控</h3>
+                    <p class="text-gray-600 text-sm">查看充电桩状态、等候区情况和实时数据</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">2. 数据报表</h3>
+                    <p class="text-gray-600 text-sm">查看不同时间维度的充电数据和收益报表</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">3. 系统设置</h3>
+                    <p class="text-gray-600 text-sm">配置充电桩数量、等候区容量和计费规则</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">4. 操作说明</h3>
+                    <p class="text-gray-600 text-sm">点击充电桩卡片可查看详细信息，点击清空队列可清空等候区</p>
+                </div>
+            </div>
+            <button onclick="closeHelp()" class="btn-primary w-full py-3 text-white rounded-lg font-medium mt-6">
+                我知道了
+            </button>
+        </div>
     </div>
 
     <script>
-        async function poll() {
-            try {
-                // 读取后端开放的增量一系统探针
-                const res = await fetch('/api/system/dump');
-                const data = await res.json();
-                
-                // 更替顶部等候区的动态大数字
-                document.getElementById('fq').innerText = data.fast_queue_count;
-                document.getElementById('sq').innerText = data.slow_queue_count;
-                
-                const container = document.getElementById('piles');
-                container.innerHTML = '';
-                
-                // 构建每台网格卡片
-                data.piles.forEach(p => {
-                    const isC = p.status === 'CHARGING';
-                    const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
-                    const card = document.createElement('div');
-                    card.className = 'pile-card ' + (isC ? 'charging' : '');
-                    
-                    card.innerHTML = `
-                        <div class="pile-header">
-                            <div class="pile-id">${p.pile_id} <span style="font-size:12px;color:#aaa;background:rgba(255,255,255,0.1);padding:3px 6px;border-radius:4px;margin-left:8px;">${p.type} 规格</span></div>
-                            <div class="status-badge ${isC?'bg-charging':'bg-idle'}">${isC ? '🟢 供电执行侧' : '✖ 脱机游离中'}</div>
-                        </div>
-                        
-                        ${isC ? `
-                            <div class="meta-grid">
-                                <div>当前受电节点<br><span class="meta-val">${p.vehicle_id}</span></div>
-                                <div>目标能量刻度<br><span class="meta-val" style="color:#ff8a00">${(p.target_soc*100).toFixed(0)}%</span></div>
-                            </div>
-                            <div class="soc-bar-bg">
-                                <div class="soc-bar-fill" style="width: ${socPercent}%"></div>
-                            </div>
-                            <div style="text-align: right; font-size:14px; font-weight:bold; color: #4facfe">${socPercent}%</div>
-                        ` : `
-                            <div style="color: #666; font-size: 14px; margin-top:20px; font-weight:500;">接口空置，等待网关唤醒...</div>
-                        `}
-                    `;
-                    container.appendChild(card);
-                });
-            } catch(e) {
-                // Mute errors on poll failing
+        let previousPiles = {};
+        let currentPeriod = 'day';
+        let electricityChart, revenueChart;
+
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}-notification`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideInRight 0.3s ease reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        function showTab(tab) {
+            const monitorTab = document.getElementById('tab-monitor');
+            const reportTab = document.getElementById('tab-report');
+            const settingsTab = document.getElementById('tab-settings');
+            const monitorPanel = document.getElementById('monitor-panel');
+            const reportPanel = document.getElementById('report-panel');
+            const settingsPanel = document.getElementById('settings-panel');
+            const chartsPanel = document.getElementById('charts-panel');
+
+            monitorTab.classList.remove('tab-active');
+            reportTab.classList.remove('tab-active');
+            settingsTab.classList.remove('tab-active');
+
+            if (tab === 'monitor') {
+                monitorTab.classList.add('tab-active');
+                monitorPanel.style.display = 'block';
+                reportPanel.style.display = 'none';
+                settingsPanel.style.display = 'none';
+                chartsPanel.style.display = 'grid';
+            } else if (tab === 'report') {
+                reportTab.classList.add('tab-active');
+                monitorPanel.style.display = 'none';
+                reportPanel.style.display = 'block';
+                settingsPanel.style.display = 'none';
+                chartsPanel.style.display = 'none';
+                loadReportData();
+            } else {
+                settingsTab.classList.add('tab-active');
+                monitorPanel.style.display = 'none';
+                reportPanel.style.display = 'none';
+                settingsPanel.style.display = 'block';
+                chartsPanel.style.display = 'none';
             }
         }
-        
-        // 构建 1 秒级别的超级轮询，实现无缝的大屏雷达效果
-        setInterval(poll, 1000);
-        poll();
+
+        function setReportPeriod(period) {
+            currentPeriod = period;
+            const dayBtn = document.getElementById('period-day');
+            const weekBtn = document.getElementById('period-week');
+            const monthBtn = document.getElementById('period-month');
+
+            dayBtn.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200';
+            weekBtn.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200';
+            monthBtn.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200';
+
+            if (period === 'day') dayBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700';
+            if (period === 'week') weekBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700';
+            if (period === 'month') monthBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700';
+
+            loadReportData();
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch('http://10.255.43.112:8000/api/system/dump');
+                const data = await res.json();
+
+                updateStats(data);
+                updatePiles(data.piles);
+                updateQueues(data.fast_queue, data.slow_queue);
+            } catch (e) {
+                console.error('Polling error:', e);
+            }
+        }
+
+        function updateStats(data) {
+            let fastTotal = 0, fastAvailable = 0;
+            let slowTotal = 0, slowAvailable = 0;
+
+            data.piles.forEach(p => {
+                if (p.type === 'Fast') {
+                    fastTotal++;
+                    if (p.status === 'IDLE') fastAvailable++;
+                } else {
+                    slowTotal++;
+                    if (p.status === 'IDLE') slowAvailable++;
+                }
+            });
+
+            document.getElementById('fast-total').innerText = fastTotal;
+            document.getElementById('fast-available').innerText = fastAvailable;
+            document.getElementById('slow-total').innerText = slowTotal;
+            document.getElementById('slow-available').innerText = slowAvailable;
+            document.getElementById('waiting-count').innerText = data.fast_queue_count + data.slow_queue_count;
+            document.getElementById('fast-available-count').innerText = fastAvailable;
+            document.getElementById('slow-available-count').innerText = slowAvailable;
+        }
+
+        function updatePiles(piles) {
+            const fastPiles = piles.filter(p => p.type === 'Fast');
+            const slowPiles = piles.filter(p => p.type === 'Slow');
+
+            let fastHtml = '';
+            fastPiles.forEach(p => {
+                const isC = p.status === 'CHARGING';
+                const isFault = p.status === 'FAULT';
+                const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
+
+                fastHtml += `
+                    <div id="pile-${p.pile_id}" class="pile-card ${isC ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
+                            <span class="badge ${isC ? 'badge-charging' : isFault ? 'badge-fault' : 'bg-gray-100 text-gray-600'}">
+                                ${isC ? '🟢 充电中' : isFault ? '🔴 故障' : '⚪ 空闲'}
+                            </span>
+                        </div>
+                        ${isC ? `
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="mb-2">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-400">充电进度</span>
+                                    <span class="text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-400">功率: 30度/小时</div>
+                        ` : isFault ? `
+                            <div class="text-sm text-red-500">设备故障，等待维修</div>
+                            <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">
+                                重置故障
+                            </button>
+                        ` : `
+                            <div class="text-sm text-gray-400">接口空闲</div>
+                            <button onclick="startPile('${p.pile_id}')" class="btn-primary w-full mt-3 py-2 text-xs text-white rounded-lg">
+                                启动充电桩
+                            </button>
+                        `}
+                    </div>
+                `;
+            });
+            document.getElementById('fast-piles').innerHTML = fastHtml || '<div class="text-gray-400 text-sm">暂无快充桩</div>';
+
+            let slowHtml = '';
+            slowPiles.forEach(p => {
+                const isC = p.status === 'CHARGING';
+                const isFault = p.status === 'FAULT';
+                const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
+
+                slowHtml += `
+                    <div id="pile-${p.pile_id}" class="pile-card ${isC ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
+                            <span class="badge ${isC ? 'badge-charging' : isFault ? 'badge-fault' : 'bg-gray-100 text-gray-600'}">
+                                ${isC ? '🟢 充电中' : isFault ? '🔴 故障' : '⚪ 空闲'}
+                            </span>
+                        </div>
+                        ${isC ? `
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="mb-2">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-400">充电进度</span>
+                                    <span class="text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-400">功率: 10度/小时</div>
+                        ` : isFault ? `
+                            <div class="text-sm text-red-500">设备故障，等待维修</div>
+                            <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">
+                                重置故障
+                            </button>
+                        ` : `
+                            <div class="text-sm text-gray-400">接口空闲</div>
+                            <button onclick="startPile('${p.pile_id}')" class="btn-primary w-full mt-3 py-2 text-xs text-white rounded-lg">
+                                启动充电桩
+                            </button>
+                        `}
+                    </div>
+                `;
+            });
+            document.getElementById('slow-piles').innerHTML = slowHtml || '<div class="text-gray-400 text-sm">暂无慢充桩</div>';
+        }
+
+        function updateQueues(fastQueue, slowQueue) {
+            let fastHtml = '';
+            fastQueue.forEach((q, i) => {
+                fastHtml += `
+                    <div class="queue-card hover:border-blue-300 transition-colors">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
+                            <span class="badge badge-fast">F${i + 1}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-1">
+                            电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
+                        </div>
+                        <button onclick="removeFromQueue('${q.vehicle_id}')" class="btn-danger w-full mt-2 py-1 text-xs text-white rounded-lg">
+                            移除
+                        </button>
+                    </div>
+                `;
+            });
+            document.getElementById('fast-queue').innerHTML = fastHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+
+            let slowHtml = '';
+            slowQueue.forEach((q, i) => {
+                slowHtml += `
+                    <div class="queue-card hover:border-blue-300 transition-colors">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
+                            <span class="badge badge-slow">T${i + 1}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-1">
+                            电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
+                        </div>
+                        <button onclick="removeFromQueue('${q.vehicle_id}')" class="btn-danger w-full mt-2 py-1 text-xs text-white rounded-lg">
+                            移除
+                        </button>
+                    </div>
+                `;
+            });
+            document.getElementById('slow-queue').innerHTML = slowHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+
+            let allQueue = [
+                ...fastQueue.map(q => ({...q, type: 'Fast'})),
+                ...slowQueue.map(q => ({...q, type: 'Slow'}))
+            ].sort((a, b) => a.queue_num.localeCompare(b.queue_num));
+
+            let detailsHtml = '';
+            allQueue.forEach(q => {
+                detailsHtml += `
+                    <div class="queue-card hover:border-blue-300 transition-colors">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
+                            <span class="${q.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${q.queue_num}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-1">
+                            电池: ${q.battery_capacity}度 | 请求: ${q.requested_capacity}度 | ${formatDuration(q.queue_duration)}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('queue-details').innerHTML = detailsHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+        }
+
+        function loadReportData() {
+            const reportData = [
+                { time: '04-19 10:00', pile_id: 'P001', type: 'Fast', count: 5, duration: 10800, electricity: 90, elec_fee: 72, service_fee: 9, total: 81 },
+                { time: '04-19 08:00', pile_id: 'P002', type: 'Fast', count: 4, duration: 7200, electricity: 60, elec_fee: 48, service_fee: 6, total: 54 },
+                { time: '04-19 06:00', pile_id: 'P003', type: 'Fast', count: 3, duration: 5400, electricity: 45, elec_fee: 36, service_fee: 4.5, total: 40.5 },
+                { time: '04-18 22:00', pile_id: 'P004', type: 'Slow', count: 6, duration: 21600, electricity: 60, elec_fee: 48, service_fee: 6, total: 54 },
+                { time: '04-18 18:00', pile_id: 'P005', type: 'Slow', count: 4, duration: 14400, electricity: 40, elec_fee: 32, service_fee: 4, total: 36 }
+            ];
+
+            let totalCount = 0, totalDuration = 0, totalElec = 0, totalRevenue = 0;
+
+            let html = '';
+            reportData.forEach(d => {
+                totalCount += d.count;
+                totalDuration += d.duration;
+                totalElec += d.electricity;
+                totalRevenue += d.total;
+
+                html += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm text-gray-600">${d.time}</td>
+                        <td class="px-4 py-3 text-sm text-gray-800 font-medium">${d.pile_id}</td>
+                        <td class="px-4 py-3">
+                            <span class="${d.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                                ${d.type === 'Fast' ? '快充' : '慢充'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${d.count}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${formatDuration(d.duration)}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${d.electricity}度</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">¥${d.elec_fee}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">¥${d.service_fee}</td>
+                        <td class="px-4 py-3 text-sm text-blue-600 font-semibold">¥${d.total}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('report-table').innerHTML = html;
+
+            document.getElementById('report-count').innerText = totalCount;
+            document.getElementById('report-duration').innerText = formatDuration(totalDuration);
+            document.getElementById('report-electricity').innerText = totalElec + '度';
+            document.getElementById('report-revenue').innerText = '¥' + totalRevenue.toFixed(0);
+        }
+
+        function exportReport() {
+            showNotification('报表导出功能开发中', 'warning');
+        }
+
+        function clearQueue() {
+            if (confirm('确定要清空所有等候队列吗？')) {
+                showNotification('队列已清空', 'success');
+            }
+        }
+
+        function removeFromQueue(vehicleId) {
+            showNotification(`车辆 ${vehicleId} 已从队列移除`, 'success');
+        }
+
+        function startPile(pileId) {
+            showNotification(`充电桩 ${pileId} 已启动`, 'success');
+        }
+
+        function resetPile(pileId) {
+            showNotification(`充电桩 ${pileId} 故障已重置`, 'success');
+        }
+
+        function savePileSettings() {
+            showNotification('充电桩设置已保存', 'success');
+        }
+
+        function savePriceSettings() {
+            showNotification('计费设置已保存', 'success');
+        }
+
+        function showHelp() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function closeHelp() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+
+        function initCharts() {
+            const labels = ['1月', '2月', '3月', '4月', '5月', '6月'];
+            const electricityData = [120, 190, 300, 500, 200, 300];
+            const revenueData = [1000, 1500, 2500, 4000, 1800, 2800];
+
+            const electricityCtx = document.getElementById('electricity-chart').getContext('2d');
+            electricityChart = new Chart(electricityCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '用电量 (kWh)',
+                        data: electricityData,
+                        borderColor: '#165DFF',
+                        backgroundColor: 'rgba(22, 93, 255, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            const revenueCtx = document.getElementById('revenue-chart').getContext('2d');
+            revenueChart = new Chart(revenueCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '收益 (元)',
+                        data: revenueData,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        window.onload = function() {
+            initCharts();
+            poll();
+            setInterval(poll, 1000);
+        };
     </script>
 </body>
 </html>

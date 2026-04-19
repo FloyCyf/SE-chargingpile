@@ -1,83 +1,759 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>车辆端 | BUPT 智能充电系统</title>
-    <!-- Wow aesthetics: Sci-Fi / Cyber Glassmorphism -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        body { margin: 0; font-family: 'Inter', sans-serif; background: radial-gradient(circle at top, #111a24, #05080f); color: white; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .glass-panel { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 40px; width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-        h1 { margin-top: 0; font-size: 24px; text-align: center; background: linear-gradient(90deg, #00f2fe, #4facfe); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        .input-group { margin-bottom: 20px; }
-        label { display: block; font-size: 14px; margin-bottom: 6px; color: #a1b0cb; }
-        input, select { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: white; font-size: 16px; outline: none; transition: border 0.3s; }
-        input:focus, select:focus { border-color: #4facfe; }
-        button { width: 100%; padding: 14px; background: linear-gradient(90deg, #4facfe, #00f2fe); border: none; border-radius: 8px; color: #000; font-weight: bold; font-size: 16px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
-        button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,242,254,0.3); }
-        .console { margin-top: 20px; padding: 15px; background: #000; border-radius: 8px; font-family: monospace; font-size: 13px; color: #4facfe; white-space: pre-wrap; height: 100px; overflow-y: auto; border: 1px solid rgba(0,242,254,0.3); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        .card {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .btn-primary {
+            background-color: #165DFF;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: #0E42C2;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: #6B7280;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background-color: #4B5563;
+            transform: translateY(-1px);
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-fast {
+            background-color: #FFF7ED;
+            color: #EA580C;
+        }
+
+        .badge-slow {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+
+        .badge-success {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+        }
+
+        .badge-warning {
+            background-color: #FFF3E0;
+            color: #E65100;
+        }
+
+        .badge-error {
+            background-color: #FEF2F2;
+            color: #DC2626;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #165DFF;
+            color: #165DFF;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-content {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #165DFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1001;
+            animation: slideInRight 0.3s ease;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .success-notification {
+            background-color: #22c55e;
+        }
+
+        .error-notification {
+            background-color: #ef4444;
+        }
+
+        .warning-notification {
+            background-color: #f59e0b;
+        }
     </style>
 </head>
-<body>
-    <div class="glass-panel">
-        <h1>发起充电请求</h1>
-        <div class="input-group">
-            <label>车牌标识 (Vehicle ID)</label>
-            <input type="text" id="vid" placeholder="例如：京A88888" value="京A88888">
-        </div>
-        <div class="input-group">
-            <label>充电需求模式</label>
-            <select id="type">
-                <option value="Fast">快充 (Fast) - 高优</option>
-                <option value="Slow">慢充 (Slow) - 常规</option>
-            </select>
-        </div>
-        <div style="display: flex; gap: 15px;">
-            <div class="input-group" style="flex:1;">
-                <label>目前表显SOC量</label>
-                <input type="number" id="csoc" step="0.1" min="0" max="0.9" value="0.2">
+<body class="min-h-screen">
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">智能充电站 · 用户端</h1>
             </div>
-            <div class="input-group" style="flex:1;">
-                <label>目标拔回SOC量</label>
-                <input type="number" id="tsoc" step="0.1" min="0.1" max="1.0" value="0.9">
+            <div class="flex items-center space-x-4">
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">当前用户</p>
+                    <p class="text-sm font-medium text-gray-800" id="current-user">京A88888</p>
+                </div>
+                <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
             </div>
         </div>
-        <button onclick="submitRequest()">发送并列入调度序列</button>
-        <div class="console" id="log">// 客户端系统已就绪...</div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 左侧：充电请求面板 -->
+            <div class="card bg-white rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">充电请求</h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">车牌标识</label>
+                        <input type="text" id="vid" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" value="京A88888" placeholder="请输入车牌号码">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">充电模式</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="btn-fast" onclick="setChargeMode('Fast')" class="btn-primary py-3 text-white rounded-lg font-medium">
+                                ⚡ 快充 (30度/小时)
+                            </button>
+                            <button id="btn-slow" onclick="setChargeMode('Slow')" class="btn-secondary py-3 text-white rounded-lg font-medium">
+                                🔌 慢充 (10度/小时)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">请求充电量 (度)</label>
+                        <input type="number" id="capacity" step="0.1" min="1" max="100" value="30" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入充电量">
+                    </div>
+
+                    <div class="pt-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm text-gray-500">预计费用</span>
+                            <span class="text-sm font-semibold text-blue-600" id="estimated-fee">¥0.00</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-gray-500">预计时长</span>
+                            <span class="text-sm font-semibold text-gray-800" id="estimated-time">0小时0分钟</span>
+                        </div>
+                    </div>
+
+                    <button onclick="submitRequest()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                        <span id="submit-btn-text">提交充电请求</span>
+                        <span id="submit-loading" class="loading hidden"></span>
+                    </button>
+                </div>
+
+                <!-- 当前状态 -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">当前状态</h3>
+                    <div id="current-status" class="text-center py-8 text-gray-500">
+                        暂无充电任务
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中间：等候区 -->
+            <div class="card bg-white rounded-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-800">⏳ 等候区</h2>
+                    <div class="text-sm text-gray-500">
+                        总车辆: <span id="queue-total" class="font-semibold text-gray-800">0</span>
+                    </div>
+                </div>
+                <div id="queue-list" class="space-y-2 max-h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        等候区暂无车辆
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：充电详单 -->
+            <div class="card bg-white rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">📋 充电详单</h2>
+
+                <div class="flex border-b border-gray-200 mb-4">
+                    <button onclick="showTab('history')" id="tab-history" class="px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">
+                        历史记录
+                    </button>
+                    <button onclick="showTab('current')" id="tab-current" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        当前详单
+                    </button>
+                </div>
+
+                <div id="detail-list" class="space-y-3 max-h-80 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        暂无充电记录
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部：充电区状态 -->
+        <div class="card bg-white rounded-lg p-6 mt-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">⚡ 充电区状态</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">
+                        <span class="badge badge-fast">⚡ 快充桩 (30度/小时)</span>
+                        <span class="text-sm text-gray-400 ml-2">
+                            可用: <span id="fast-available-count" class="text-green-600 font-semibold">0</span>/3
+                        </span>
+                    </h3>
+                    <div id="fast-piles" class="grid grid-cols-3 gap-4">
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">
+                        <span class="badge badge-slow">🔌 慢充桩 (10度/小时)</span>
+                        <span class="text-sm text-gray-400 ml-2">
+                            可用: <span id="slow-available-count" class="text-green-600 font-semibold">0</span>/2
+                        </span>
+                    </h3>
+                    <div id="slow-piles" class="grid grid-cols-2 gap-4">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 收费弹窗 -->
+    <div id="billModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl p-8 w-full max-w-lg shadow-xl">
+            <h2 class="text-2xl font-bold text-center mb-6 text-gray-800">充电完成结算</h2>
+
+            <div class="space-y-3">
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">订单编号</span>
+                    <span id="bill-order-id" class="font-semibold text-gray-800">--</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">充电桩编号</span>
+                    <span id="bill-pile-id" class="font-semibold text-gray-800">--</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">充电电量</span>
+                    <span id="bill-electricity" class="font-semibold text-gray-800">-- kWh</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">充电时长</span>
+                    <span id="bill-duration" class="font-semibold text-gray-800">--</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">充电电费</span>
+                    <span class="font-semibold text-gray-800">¥<span id="bill-electricity-fee">--</span></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                    <span class="text-gray-500">服务费用</span>
+                    <span class="font-semibold text-gray-800">¥<span id="bill-service-fee">--</span></span>
+                </div>
+                <div class="flex justify-between py-3 text-lg font-bold border-t-2 border-blue-500">
+                    <span class="text-gray-800">总费用</span>
+                    <span class="text-blue-600">¥<span id="bill-total-fee">--</span></span>
+                </div>
+            </div>
+
+            <div class="flex gap-4 mt-8">
+                <button onclick="cancelCharge()" class="btn-secondary flex-1 py-3 text-white rounded-lg font-medium">
+                    取消充电
+                </button>
+                <button onclick="confirmAndReset()" class="btn-primary flex-1 py-3 text-white rounded-lg font-medium">
+                    确认完成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帮助弹窗 -->
+    <div id="helpModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl p-8 w-full max-w-lg shadow-xl">
+            <h2 class="text-2xl font-bold text-center mb-6 text-gray-800">使用帮助</h2>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-semibold text-gray-800">1. 充电请求</h3>
+                    <p class="text-gray-600 text-sm">输入车牌号码，选择充电模式和充电量，点击提交充电请求</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">2. 等候区</h3>
+                    <p class="text-gray-600 text-sm">显示当前等候车辆，F开头为快充队列，T开头为慢充队列</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">3. 充电详单</h3>
+                    <p class="text-gray-600 text-sm">查看历史充电记录和当前充电详情</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">4. 充电区状态</h3>
+                    <p class="text-gray-600 text-sm">实时显示充电桩状态，绿色为充电中，灰色为空闲，红色为故障</p>
+                </div>
+            </div>
+            <button onclick="closeHelp()" class="btn-primary w-full py-3 text-white rounded-lg font-medium mt-6">
+                我知道了
+            </button>
+        </div>
     </div>
 
     <script>
-        function log(msg) {
-            const el = document.getElementById('log');
-            el.innerHTML += '\n> ' + msg;
-            el.scrollTop = el.scrollHeight; // Auto scroll to bottom
+        let chargeMode = 'Fast';
+        let currentVehicleId = '京A88888';
+
+        function setChargeMode(mode) {
+            chargeMode = mode;
+            const fastBtn = document.getElementById('btn-fast');
+            const slowBtn = document.getElementById('btn-slow');
+
+            if (mode === 'Fast') {
+                fastBtn.classList.remove('btn-secondary');
+                fastBtn.classList.add('btn-primary');
+                slowBtn.classList.remove('btn-primary');
+                slowBtn.classList.add('btn-secondary');
+            } else {
+                slowBtn.classList.remove('btn-secondary');
+                slowBtn.classList.add('btn-primary');
+                fastBtn.classList.remove('btn-primary');
+                fastBtn.classList.add('btn-secondary');
+            }
+            updateEstimated();
         }
+
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function updateEstimated() {
+            const capacity = parseFloat(document.getElementById('capacity').value) || 0;
+            const power = chargeMode === 'Fast' ? 30 : 10;
+            const hours = capacity / power;
+            const minutes = Math.floor((hours - Math.floor(hours)) * 60);
+            
+            document.getElementById('estimated-time').textContent = `${Math.floor(hours)}小时${minutes}分钟`;
+            
+            // 估算费用 (峰时电价)
+            const electricityFee = capacity * 1.0;
+            const serviceFee = capacity * 0.8;
+            const totalFee = electricityFee + serviceFee;
+            document.getElementById('estimated-fee').textContent = `¥${totalFee.toFixed(2)}`;
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}-notification`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideInRight 0.3s ease reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
         async function submitRequest() {
+            const vehicleId = document.getElementById('vid').value;
+            const capacity = parseFloat(document.getElementById('capacity').value);
+
+            if (!vehicleId) {
+                showNotification('请输入车牌号码', 'error');
+                return;
+            }
+
+            if (!capacity || capacity <= 0) {
+                showNotification('请输入有效充电量', 'error');
+                return;
+            }
+
+            // 显示加载状态
+            document.getElementById('submit-btn-text').textContent = '提交中...';
+            document.getElementById('submit-loading').classList.remove('hidden');
+
             const payload = {
-                vehicle_id: document.getElementById('vid').value,
-                charge_type: document.getElementById('type').value,
-                current_soc: parseFloat(document.getElementById('csoc').value),
-                target_soc: parseFloat(document.getElementById('tsoc').value)
+                vehicle_id: vehicleId,
+                charge_type: chargeMode,
+                requested_capacity: capacity
             };
-            log("正在发起车辆端调度握手...");
+
             try {
-                const res = await fetch('/api/requests/', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
+                // 模拟API请求
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                // 处理满载拒绝
-                if(data.status === 'rejected') {
-                    log(`<span style="color:#ff4b4b">${data.message}</span>`);
-                } else {
-                    // 处理派发或排队
-                    log(`<span style="color:#00e676">${data.message} ${data.assigned_pile ? '🟢 连接至接口位: '+data.assigned_pile : '🟡 顺位号码: '+data.queue_position}</span>`);
-                }
-            } catch(e) {
-                log('<span style="color:#ff4b4b">服务器离线，系统拦截了握手。</span>');
+                showNotification('充电请求已提交成功！', 'success');
+                
+                currentVehicleId = vehicleId;
+                document.getElementById('current-user').textContent = vehicleId;
+                updateCurrentStatus();
+            } catch (error) {
+                showNotification('提交失败，请重试', 'error');
+            } finally {
+                document.getElementById('submit-btn-text').textContent = '提交充电请求';
+                document.getElementById('submit-loading').classList.add('hidden');
             }
         }
+
+        function updateCurrentStatus() {
+            const capacity = document.getElementById('capacity').value;
+            const statusHtml = `
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-semibold text-gray-800">${currentVehicleId}</span>
+                        <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                            ${chargeMode === 'Fast' ? '快充' : '慢充'}
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-1">
+                        <p>排队号码: <span class="font-semibold text-gray-800">${chargeMode === 'Fast' ? 'F1' : 'T1'}</span></p>
+                        <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
+                        <p>前车等待: <span class="text-orange-500 font-semibold">2辆</span></p>
+                        <p>预计等待: <span class="text-blue-600 font-semibold">15分钟</span></p>
+                    </div>
+                    <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
+                        取消充电
+                    </button>
+                </div>
+            `;
+            document.getElementById('current-status').innerHTML = statusHtml;
+        }
+
+        async function cancelChargeRequest() {
+            if (confirm('确定要取消充电请求吗？')) {
+                showNotification('充电请求已取消', 'warning');
+                document.getElementById('current-status').innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        暂无充电任务
+                    </div>
+                `;
+            }
+        }
+
+        function showTab(tab) {
+            const historyTab = document.getElementById('tab-history');
+            const currentTab = document.getElementById('tab-current');
+
+            if (tab === 'history') {
+                historyTab.classList.add('tab-active');
+                currentTab.classList.remove('tab-active');
+            } else {
+                currentTab.classList.add('tab-active');
+                historyTab.classList.remove('tab-active');
+            }
+
+            loadDetails(tab);
+        }
+
+        async function loadDetails(type) {
+            const details = [
+                {
+                    order_id: 'ORD20260419001',
+                    pile_id: 'P001',
+                    electricity: 25.5,
+                    duration: 3600,
+                    start_time: '2026-04-19T10:00:00',
+                    electricity_fee: 20.4,
+                    service_fee: 2.55,
+                    total_fee: 22.95
+                },
+                {
+                    order_id: 'ORD20260419002',
+                    pile_id: 'P003',
+                    electricity: 40.0,
+                    duration: 5400,
+                    start_time: '2026-04-18T15:00:00',
+                    electricity_fee: 32.0,
+                    service_fee: 4.0,
+                    total_fee: 36.0
+                }
+            ];
+
+            let html = '';
+            details.forEach(d => {
+                html += `
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-gray-800">${d.order_id}</span>
+                            <span class="text-blue-600 font-bold">¥${d.total_fee.toFixed(2)}</span>
+                        </div>
+                        <div class="text-sm text-gray-500 space-y-1">
+                            <p>充电桩: ${d.pile_id} | 电量: ${d.electricity.toFixed(2)}度</p>
+                            <p>时长: ${formatDuration(d.duration)}</p>
+                            <p>时间: ${formatDateTime(d.start_time)}</p>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('detail-list').innerHTML = html || '<div class="text-center py-8 text-gray-500">暂无记录</div>';
+        }
+
+        async function loadQueueList() {
+            const fastQueue = [
+                { vehicle_id: '京B12345', capacity: 30, queue_num: 'F1' },
+                { vehicle_id: '京C67890', capacity: 25, queue_num: 'F2' }
+            ];
+
+            const slowQueue = [
+                { vehicle_id: '京D11111', capacity: 50, queue_num: 'T1' }
+            ];
+
+            document.getElementById('queue-total').textContent = fastQueue.length + slowQueue.length;
+
+            let html = '';
+
+            if (chargeMode === 'Fast') {
+                html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
+                    <div class="text-gray-600">前方等待</div>
+                    <div class="text-3xl font-bold text-blue-600 my-2">${fastQueue.length}</div>
+                    <div class="text-gray-500 text-sm">辆快充车辆</div>
+                </div>`;
+            } else {
+                html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
+                    <div class="text-gray-600">前方等待</div>
+                    <div class="text-3xl font-bold text-blue-600 my-2">${slowQueue.length}</div>
+                    <div class="text-gray-500 text-sm">辆慢充车辆</div>
+                </div>`;
+            }
+
+            document.getElementById('queue-list').innerHTML = html;
+        }
+
+        async function loadPileStatus() {
+            const fastPiles = [
+                { pile_id: 'P001', status: 'CHARGING', vehicle_id: '京A88888', soc: 0.65, target_soc: 0.9 },
+                { pile_id: 'P002', status: 'IDLE', vehicle_id: null },
+                { pile_id: 'P003', status: 'CHARGING', vehicle_id: '京B66666', soc: 0.45, target_soc: 0.8 }
+            ];
+
+            const slowPiles = [
+                { pile_id: 'P004', status: 'CHARGING', vehicle_id: '京C99999', soc: 0.30, target_soc: 0.9 },
+                { pile_id: 'P005', status: 'IDLE', vehicle_id: null }
+            ];
+
+            const fastAvailable = fastPiles.filter(p => p.status === 'IDLE').length;
+            const slowAvailable = slowPiles.filter(p => p.status === 'IDLE').length;
+
+            document.getElementById('fast-available-count').textContent = fastAvailable;
+            document.getElementById('slow-available-count').textContent = slowAvailable;
+
+            let fastHtml = '';
+            fastPiles.forEach(p => {
+                const socPercent = Math.floor(p.soc * 100);
+                const isCharging = p.status === 'CHARGING';
+
+                fastHtml += `
+                    <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
+                            <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
+                                ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
+                            </div>
+                            ${isCharging ? `
+                                <div class="text-sm mb-2 text-gray-600">${p.vehicle_id}</div>
+                                <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
+                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                                </div>
+                                <div class="text-xs text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</div>
+                            ` : `
+                                <div class="text-sm text-gray-400">等待车辆</div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('fast-piles').innerHTML = fastHtml;
+
+            let slowHtml = '';
+            slowPiles.forEach(p => {
+                const socPercent = Math.floor(p.soc * 100);
+                const isCharging = p.status === 'CHARGING';
+
+                slowHtml += `
+                    <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
+                            <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
+                                ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
+                            </div>
+                            ${isCharging ? `
+                                <div class="text-sm mb-2 text-gray-600">${p.vehicle_id}</div>
+                                <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
+                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                                </div>
+                                <div class="text-xs text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</div>
+                            ` : `
+                                <div class="text-sm text-gray-400">等待车辆</div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('slow-piles').innerHTML = slowHtml;
+        }
+
+        function showBillModal(orderData) {
+            document.getElementById('bill-order-id').textContent = orderData.order_id;
+            document.getElementById('bill-pile-id').textContent = orderData.pile_id;
+            document.getElementById('bill-electricity').textContent = `${orderData.electricity.toFixed(2)} kWh`;
+            document.getElementById('bill-duration').textContent = formatDuration(orderData.duration);
+            document.getElementById('bill-electricity-fee').textContent = orderData.electricity_fee.toFixed(2);
+            document.getElementById('bill-service-fee').textContent = orderData.service_fee.toFixed(2);
+            document.getElementById('bill-total-fee').textContent = orderData.total_fee.toFixed(2);
+            document.getElementById('billModal').style.display = 'flex';
+        }
+
+        function closeBillModal() {
+            document.getElementById('billModal').style.display = 'none';
+        }
+
+        function cancelCharge() {
+            showNotification('充电已取消', 'warning');
+            closeBillModal();
+        }
+
+        function confirmAndReset() {
+            showNotification('确认完成，感谢使用智能充电站！', 'success');
+            closeBillModal();
+            document.getElementById('current-status').innerHTML = `
+                <div class="text-center py-8 text-gray-500">
+                    暂无充电任务
+                </div>
+            `;
+        }
+
+        function showHelp() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function closeHelp() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+
+        async function checkVehicleStatus() {
+            const vehicleId = document.getElementById('vid').value;
+            try {
+                const res = await fetch(`/api/vehicle/status/${vehicleId}`);
+                const data = await res.json();
+
+                if (data.status === 'COMPLETED' && data.order_id) {
+                    const orderRes = await fetch(`/api/order/${data.order_id}`);
+                    const orderData = await orderRes.json();
+                    showBillModal(orderData);
+                }
+            } catch (e) {
+                // 静默忽略，继续轮询
+            }
+        }
+
+        function initPage() {
+            setChargeMode('Fast');
+            loadQueueList();
+            loadPileStatus();
+            loadDetails('history');
+
+            // 监听充电量变化
+            document.getElementById('capacity').addEventListener('input', updateEstimated);
+        }
+
+        window.onload = function() {
+            initPage();
+
+            setInterval(() => {
+                loadQueueList();
+                loadPileStatus();
+            }, 3000);
+
+            setInterval(checkVehicleStatus, 3000);
+        };
     </script>
 </body>
 </html>
