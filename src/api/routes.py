@@ -5,7 +5,7 @@ from src.api.schemas import (
 )
 from src.models.database import AsyncSessionLocal
 from src.models.models import ChargeOrder
-from src.core.billing import BillingEngine
+from src.core.billing import calculate_fee
 
 router = APIRouter()
 
@@ -36,11 +36,10 @@ async def get_bill(order_id: int, request: Request):
 
     # 对已结算的订单，重新计算分时明细用于展示
     detail = None
-    if (order.started_at is not None and order.finished_at is not None
+    if (order.charge_start_time is not None and order.charge_end_time is not None
             and order.total_power is not None and order.total_power > 0):
-        billing: BillingEngine = request.app.state.scheduler.billing
-        billing._total_kwh = order.total_power
-        fee_result = billing.calculate_fee(order.started_at, order.finished_at)
+        fee_result = calculate_fee(
+            order.charge_start_time, order.charge_end_time, order.total_power)
         detail = FeeDetail(**fee_result['detail'])
 
     return BillResponse(
@@ -51,6 +50,10 @@ async def get_bill(order_id: int, request: Request):
         status=order.status,
         start_soc=order.start_soc,
         target_soc=order.target_soc,
+        bill_code=order.bill_code,
+        charge_start_time=order.charge_start_time,
+        charge_end_time=order.charge_end_time,
+        charge_duration=order.charge_duration,
         total_power=order.total_power,
         power_fee=order.power_fee,
         service_fee=order.service_fee,
@@ -58,7 +61,6 @@ async def get_bill(order_id: int, request: Request):
         created_at=order.created_at,
         started_at=order.started_at,
         finished_at=order.finished_at,
-        left_at=order.left_at,
         detail=detail,
     )
 

@@ -1,10 +1,13 @@
 import asyncio
+import random
+import string
+from datetime import datetime
 from typing import Dict, List, Optional
 from src.api.schemas import ChargeRequest
 from src.core.clock import VirtualClock
-from src.core.billing import BillingEngine
+from src.core.billing import calculate_fee
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder
+from src.models.models import ChargeOrder, OrderStatus
 
 
 class ChargingPile:
@@ -16,6 +19,10 @@ class ChargingPile:
         self.current_soc: Optional[float] = None
         self.target_soc: Optional[float] = None
         self.db_order_id: Optional[int] = None
+        # 累计统计（内存镜像）
+        self.total_charge_count: int = 0
+        self.total_charge_duration: float = 0.0
+        self.total_charge_amount: float = 0.0
 
     def assign_vehicle(self, vehicle_id: str, current_soc: float,
                        target_soc: float, order_id: int):
@@ -33,23 +40,34 @@ class ChargingPile:
         self.db_order_id = None
 
 
+def _generate_bill_code() -> str:
+    """生成详单编号: BILL + 时间戳 + 6位随机字符"""
+    rand_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return "BILL" + datetime.now().strftime("%Y%m%d%H%M%S") + rand_chars
+
+
 class FIFOScheduler:
     def __init__(self, config: dict):
         self.config = config
-        self.waiting_capacity = config['system']['waiting_area_capacity']
+        self.waiting_capacity = config['system'].get(
+            'waiting_area_size',
+            config['system'].get('waiting_area_capacity', 6))
         self.fast_rate = config['simulation'].get('fast_charge_percent_per_min', 0.01)
         self.slow_rate = config['simulation'].get('slow_charge_percent_per_min', 0.005)
+        self.battery_capacity = config.get('billing', {}).get(
+            'battery_capacity_kwh', 60.0)
 
         # 初始化时钟单例
         self.clock = VirtualClock(config)
         self.lock = asyncio.Lock()
 
-        # 初始化计费引擎
-        self.billing = BillingEngine(config)
-
         self.piles: List[ChargingPile] = []
-        fast_count = config['system']['fast_charging_piles']
-        slow_count = config['system']['slow_charging_piles']
+        fast_count = config['system'].get(
+            'fast_pile_count',
+            config['system'].get('fast_charging_piles', 3))
+        slow_count = config['system'].get(
+            'slow_pile_count',
+            config['system'].get('slow_charging_piles', 3))
 
         for i in range(fast_count):
             self.piles.append(ChargingPile(f"F{i+1}", "Fast"))
@@ -73,17 +91,15 @@ class FIFOScheduler:
                 return {"status": "rejected", "message": "等候区已满，拒绝接纳",
                         "queue_position": None, "assigned_pile": None}
 
-            # 使用自建的时钟打表
             current_vtime = self.clock.get_time()
 
-            # 首先写入数据库订单记录(QUEUING)
             async with AsyncSessionLocal() as session:
                 new_order = ChargeOrder(
                     vehicle_id=request.vehicle_id,
                     charge_type=request.charge_type,
                     start_soc=request.current_soc,
                     target_soc=request.target_soc,
-                    status="QUEUING",
+                    status=OrderStatus.QUEUING,
                     created_at=current_vtime
                 )
                 session.add(new_order)
@@ -99,7 +115,6 @@ class FIFOScheduler:
                 "order_id": order_id
             }
 
-            # Try to find empty pile immediately
             empty_piles = [p for p in self.piles
                            if p.type == request.charge_type and p.status == "IDLE"]
             if empty_piles:
@@ -110,7 +125,6 @@ class FIFOScheduler:
                         "assigned_pile": pile.pile_id,
                         "queue_position": None}
             else:
-                # Enqueue
                 if request.charge_type == "Fast":
                     self.fast_queue.append(queue_item)
                     pos = len(self.fast_queue)
@@ -128,29 +142,26 @@ class FIFOScheduler:
     async def cancel_request(self, order_id: int) -> dict:
         """取消排队中的充电请求（仅 QUEUING 状态可取消）"""
         async with self.lock:
-            # 在快充队列中查找
             for i, item in enumerate(self.fast_queue):
                 if item['order_id'] == order_id:
                     self.fast_queue.pop(i)
-                    await self._update_order_status(order_id, "CANCELLED")
+                    await self._update_order_status(order_id, OrderStatus.CANCELLED)
                     return {"status": "success", "message": "已取消排队，不产生任何费用"}
 
-            # 在慢充队列中查找
             for i, item in enumerate(self.slow_queue):
                 if item['order_id'] == order_id:
                     self.slow_queue.pop(i)
-                    await self._update_order_status(order_id, "CANCELLED")
+                    await self._update_order_status(order_id, OrderStatus.CANCELLED)
                     return {"status": "success", "message": "已取消排队，不产生任何费用"}
 
-            # 不在队列中，检查是否在充电或已完成
             async with AsyncSessionLocal() as session:
                 order = await session.get(ChargeOrder, order_id)
                 if order is None:
                     return {"status": "failed", "message": "订单不存在"}
-                if order.status == "CHARGING":
+                if order.status == OrderStatus.CHARGING:
                     return {"status": "failed",
                             "message": "该订单正在充电中，请使用停止充电接口"}
-                if order.status in ("COMPLETED", "INTERRUPTED", "CANCELLED"):
+                if order.status in (OrderStatus.COMPLETED, OrderStatus.CANCELLED):
                     return {"status": "failed",
                             "message": f"该订单已处于{order.status}状态，无法取消"}
 
@@ -165,14 +176,14 @@ class FIFOScheduler:
         async with self.lock:
             current_vtime = self.clock.get_time()
 
-            # 查找正在为该订单充电的桩
             for pile in self.piles:
                 if pile.db_order_id == order_id and pile.status == "CHARGING":
                     print(f"[Clock {current_vtime.strftime('%H:%M:%S')}] "
                           f"车辆 {pile.vehicle_id} 于 {pile.pile_id} 主动中断充电。")
 
+                    # 充电完成后不自动调度
                     bill = await self._finish_charging(
-                        pile, current_vtime, status="INTERRUPTED")
+                        pile, current_vtime, status=OrderStatus.COMPLETED)
 
                     return {
                         "status": "success",
@@ -183,12 +194,11 @@ class FIFOScheduler:
                         "total_fee": bill['total_fee'] if bill else 0.0,
                     }
 
-            # 没找到对应的充电中桩
             async with AsyncSessionLocal() as session:
                 order = await session.get(ChargeOrder, order_id)
                 if order is None:
                     return {"status": "failed", "message": "订单不存在"}
-                if order.status == "QUEUING":
+                if order.status == OrderStatus.QUEUING:
                     return {"status": "failed",
                             "message": "该订单尚在排队中，请使用取消接口"}
 
@@ -211,40 +221,54 @@ class FIFOScheduler:
             order = await session.get(ChargeOrder, queue_item['order_id'])
             if order:
                 order.pile_id = pile.pile_id
-                order.status = "CHARGING"
+                order.status = OrderStatus.CHARGING
                 order.started_at = assign_time
+                order.charge_start_time = assign_time
                 await session.commit()
 
     async def _finish_charging(self, pile: ChargingPile, current_vtime,
-                               status: str = "COMPLETED") -> Optional[dict]:
+                               status: str = OrderStatus.COMPLETED) -> Optional[dict]:
         """
         通用的充电结束处理：计费 + 写入DB + 释放桩位
-        status: COMPLETED（自动充满）或 INTERRUPTED（用户主动中断）
-        返回账单字典或 None
+        充电完成后不自动调度排队车辆。
         """
-        end_soc = pile.current_soc
         bill_data = None
 
         async with AsyncSessionLocal() as session:
             order = await session.get(ChargeOrder, pile.db_order_id)
             if order:
-                # SOC 转换为充电度数
-                total_kwh = self.billing.soc_to_kwh(order.start_soc, end_soc)
+                # 计算充电度数: (target_soc - start_soc) / 100 * battery_capacity
+                # SOC 可能是 0-1 范围或 0-100 范围，按当前系统约定处理
+                start_soc = order.start_soc
+                end_soc = pile.current_soc if pile.current_soc is not None else order.target_soc
 
-                # 设置度数并调用双参数计费接口
-                self.billing._total_kwh = total_kwh
-                bill = self.billing.calculate_fee(
-                    order.started_at, current_vtime)
+                # SOC 在 0-1 范围时直接 * battery_capacity
+                charged_kwh = max(0.0, end_soc - start_soc) * self.battery_capacity
 
+                # 调用计费函数
+                charge_start = order.charge_start_time or order.started_at
+                fee_result = calculate_fee(charge_start, current_vtime, charged_kwh)
+
+                # 更新订单
                 order.status = status
                 order.finished_at = current_vtime
-                order.total_power = bill['total_power']
-                order.power_fee = bill['power_fee']
-                order.service_fee = bill['service_fee']
-                order.total_fee = bill['total_fee']
+                order.charge_end_time = current_vtime
+                order.bill_code = _generate_bill_code()
+                order.total_power = fee_result["total_power"]
+                order.charge_duration = fee_result["duration_hours"]
+                order.power_fee = fee_result["power_fee"]
+                order.service_fee = fee_result["service_fee"]
+                order.total_fee = fee_result["total_fee"]
                 await session.commit()
-                bill_data = bill
+                bill_data = fee_result
 
+        # 更新充电桩统计
+        if bill_data:
+            pile.total_charge_count += 1
+            pile.total_charge_duration += bill_data["duration_hours"]
+            pile.total_charge_amount += bill_data["total_power"]
+
+        # 释放桩位
         pile.free_pile()
         return bill_data
 
@@ -256,17 +280,6 @@ class FIFOScheduler:
                 order.status = status
                 await session.commit()
 
-    async def dispatch_from_queues(self, current_vtime):
-        """试图将队列中的车辆调度到空闲的桩"""
-        for pile in self.piles:
-            if pile.status == "IDLE":
-                if pile.type == "Fast" and self.fast_queue:
-                    req = self.fast_queue.pop(0)
-                    await self._assign_to_pile(pile, req, current_vtime)
-                elif pile.type == "Slow" and self.slow_queue:
-                    req = self.slow_queue.pop(0)
-                    await self._assign_to_pile(pile, req, current_vtime)
-
     def get_system_status(self) -> dict:
         return {
             "piles": [
@@ -276,7 +289,10 @@ class FIFOScheduler:
                     "status": p.status,
                     "vehicle_id": p.vehicle_id,
                     "current_soc": p.current_soc,
-                    "target_soc": p.target_soc
+                    "target_soc": p.target_soc,
+                    "total_charge_count": p.total_charge_count,
+                    "total_charge_duration": p.total_charge_duration,
+                    "total_charge_amount": p.total_charge_amount,
                 } for p in self.piles
             ],
             "fast_queue_count": len(self.fast_queue),
@@ -290,12 +306,11 @@ class FIFOScheduler:
     async def simulate_battery_growth(self):
         """后台任务：结合虚拟时钟加速推进电量，并落盘结束数据"""
         while True:
-            await asyncio.sleep(1.0)  # 真实的1秒走一周期
+            await asyncio.sleep(1.0)
             async with self.lock:
                 current_vtime = self.clock.get_time()
                 for pile in self.piles:
                     if pile.status == "CHARGING" and pile.current_soc is not None:
-                        # 对于每个周期，电量增长该倍率的值
                         rate = self.fast_rate if pile.type == "Fast" else self.slow_rate
                         pile.current_soc += rate
                         pile.current_soc = round(pile.current_soc, 4)
@@ -305,5 +320,8 @@ class FIFOScheduler:
                             print(f"[Clock {current_vtime.strftime('%H:%M:%S')}] "
                                   f"车辆 {pile.vehicle_id} 于 {pile.pile_id} 充满出场。")
 
+                            # 计费 + 写入DB + 释放桩位
                             await self._finish_charging(
-                                pile, current_vtime, status="COMPLETED")
+                                pile, current_vtime, status=OrderStatus.COMPLETED)
+                            # 【关键】充电完成后禁止自动调度
+                            # 不调用 dispatch_from_queues

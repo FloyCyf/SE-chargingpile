@@ -19,11 +19,14 @@ class ChargeResponse(BaseModel):
 
 class PileStatus(BaseModel):
     pile_id: str
-    type: str      # Fast or Slow
-    status: str    # IDLE or CHARGING
+    type: str
+    status: str
     vehicle_id: Optional[str] = None
     current_soc: Optional[float] = None
     target_soc: Optional[float] = None
+    total_charge_count: int = 0
+    total_charge_duration: float = 0.0
+    total_charge_amount: float = 0.0
 
 
 class SystemStatusResponse(BaseModel):
@@ -36,9 +39,9 @@ class SystemStatusResponse(BaseModel):
 
 class FeeDetail(BaseModel):
     """分时计费明细"""
-    peak_kwh: float = 0.0    # 波峰充电度数
-    flat_kwh: float = 0.0    # 波平充电度数
-    valley_kwh: float = 0.0  # 波谷充电度数
+    peak_minutes: int = 0
+    flat_minutes: int = 0
+    valley_minutes: int = 0
 
 
 class BillResponse(BaseModel):
@@ -51,18 +54,22 @@ class BillResponse(BaseModel):
 
     start_soc: float
     target_soc: float
-    total_power: Optional[float] = None    # 总充电度数
 
-    power_fee: Optional[float] = None      # 分时电费
-    service_fee: Optional[float] = None    # 服务费
-    total_fee: Optional[float] = None      # 总费用
+    bill_code: Optional[str] = None
+    charge_start_time: Optional[datetime] = None
+    charge_end_time: Optional[datetime] = None
+    charge_duration: Optional[float] = None
+    total_power: Optional[float] = None
+
+    power_fee: Optional[float] = None
+    service_fee: Optional[float] = None
+    total_fee: Optional[float] = None
 
     created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
-    left_at: Optional[datetime] = None
 
-    detail: Optional[FeeDetail] = None     # 分时明细
+    detail: Optional[FeeDetail] = None
 
 
 class CancelResponse(BaseModel):
@@ -75,7 +82,7 @@ class StopResponse(BaseModel):
     """主动停止充电结果"""
     status: str
     message: str
-    total_power: Optional[float] = None    # 总充电度数
-    power_fee: Optional[float] = None      # 分时电费
-    service_fee: Optional[float] = None    # 服务费
-    total_fee: Optional[float] = None      # 总费用
+    total_power: Optional[float] = None
+    power_fee: Optional[float] = None
+    service_fee: Optional[float] = None
+    total_fee: Optional[float] = None
