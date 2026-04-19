@@ -1,11 +1,29 @@
-# 智能充电桩硬件与系统配置参数
-# 对应说明书 2.1 节
+# 智能充电桩系统配置
 system:
-  fast_charging_piles: 3   # 快充桩数量 N_fast
-  slow_charging_piles: 3   # 慢充桩数量 N_slow
-  waiting_area_capacity: 6 # 等候区(车位)容量 M
+  fast_pile_count: 3
+  slow_pile_count: 2
+  waiting_area_size: 10
+  pile_queue_length: 2
+  # 向后兼容旧键名
+  fast_charging_piles: 3
+  slow_charging_piles: 2
+  waiting_area_capacity: 10
 
 simulation:
-  virtual_minutes_per_real_second: 1   # 时间压缩倍率：1现实秒对应多少虚拟分钟
-  fast_charge_percent_per_min: 0.01    # 快充虚拟每分钟充电比例（1%）
-  slow_charge_percent_per_min: 0.005   # 慢充虚拟每分钟充电比例（0.5%）
+  virtual_minutes_per_real_second: 1
+  fast_charge_percent_per_min: 0.01
+  slow_charge_percent_per_min: 0.005
+
+charging:
+  fast_power: 30.0
+  slow_power: 10.0
+
+billing:
+  battery_capacity_kwh: 60.0
+  peak_rate: 1.0
+  flat_rate: 0.7
+  valley_rate: 0.4
+  service_fee_rate: 0.8
+  peak_hours: [[10, 15], [18, 21]]
+  flat_hours: [[7, 10], [15, 18], [21, 23]]
+  valley_hours: [[23, 24], [0, 7]]
