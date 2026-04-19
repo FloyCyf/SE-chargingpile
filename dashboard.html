@@ -195,7 +195,7 @@
 
         async function fetchPileStatus() {
             try {
-                const response = await axios.get('/api/pile/status');
+                const response = await axios.get('http://10.255.43.112:8000/api/admin/pile/status');
                 const piles = response.data;
                 
                 let pileHtml = '';
@@ -252,7 +252,7 @@
 
         async function fetchQueueList() {
             try {
-                const response = await axios.get('/api/queue/list');
+                const response = await axios.get('http://10.255.43.112:8000/api/admin/queue/list');
                 const queue = response.data;
                 
                 let html = '';
@@ -280,7 +280,7 @@
 
         async function fetchStatistics() {
             try {
-                const response = await axios.get('/api/pile/statistics');
+                const response = await axios.get('http://10.255.43.112:8000/api/admin/pile/statistics');
                 const stats = response.data;
                 
                 document.getElementById('today-count').textContent = stats.today_charging_count;

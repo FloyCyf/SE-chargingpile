@@ -466,15 +466,15 @@
             };
 
             try {
-                // 模拟API请求
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                const response = await axios.post('http://10.255.43.112:8000/api/user/charge/request', payload);
                 
                 showNotification('充电请求已提交成功！', 'success');
                 
                 currentVehicleId = vehicleId;
                 document.getElementById('current-user').textContent = vehicleId;
-                updateCurrentStatus();
+                await updateCurrentStatus();
             } catch (error) {
+                console.error('Error submitting charge request:', error);
                 showNotification('提交失败，请重试', 'error');
             } finally {
                 document.getElementById('submit-btn-text').textContent = '提交充电请求';
@@ -482,38 +482,83 @@
             }
         }
 
-        function updateCurrentStatus() {
-            const capacity = document.getElementById('capacity').value;
-            const statusHtml = `
-                <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="font-semibold text-gray-800">${currentVehicleId}</span>
-                        <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
-                            ${chargeMode === 'Fast' ? '快充' : '慢充'}
-                        </span>
+        async function updateCurrentStatus() {
+            try {
+                const vehicleId = currentVehicleId;
+                if (!vehicleId) return;
+                
+                const response = await axios.get(`http://10.255.43.112:8000/api/user/vehicle/status/${vehicleId}`);
+                const data = response.data;
+                
+                const capacity = document.getElementById('capacity').value;
+                const statusHtml = `
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-gray-800">${vehicleId}</span>
+                            <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                                ${chargeMode === 'Fast' ? '快充' : '慢充'}
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-600 space-y-1">
+                            <p>排队号码: <span class="font-semibold text-gray-800">${data.queue_id || '暂无'}</span></p>
+                            <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
+                            <p>前车等待: <span class="text-orange-500 font-semibold">${data.queue_position || 0}辆</span></p>
+                            <p>预计等待: <span class="text-blue-600 font-semibold">${data.estimated_wait_time || '0'}分钟</span></p>
+                        </div>
+                        <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
+                            取消充电
+                        </button>
                     </div>
-                    <div class="text-sm text-gray-600 space-y-1">
-                        <p>排队号码: <span class="font-semibold text-gray-800">${chargeMode === 'Fast' ? 'F1' : 'T1'}</span></p>
-                        <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
-                        <p>前车等待: <span class="text-orange-500 font-semibold">2辆</span></p>
-                        <p>预计等待: <span class="text-blue-600 font-semibold">15分钟</span></p>
+                `;
+                document.getElementById('current-status').innerHTML = statusHtml;
+            } catch (error) {
+                console.error('Error updating current status:', error);
+                // 显示默认状态
+                const capacity = document.getElementById('capacity').value;
+                const statusHtml = `
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-gray-800">${currentVehicleId}</span>
+                            <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                                ${chargeMode === 'Fast' ? '快充' : '慢充'}
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-600 space-y-1">
+                            <p>排队号码: <span class="font-semibold text-gray-800">${chargeMode === 'Fast' ? 'F1' : 'T1'}</span></p>
+                            <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
+                            <p>前车等待: <span class="text-orange-500 font-semibold">2辆</span></p>
+                            <p>预计等待: <span class="text-blue-600 font-semibold">15分钟</span></p>
+                        </div>
+                        <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
+                            取消充电
+                        </button>
                     </div>
-                    <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
-                        取消充电
-                    </button>
-                </div>
-            `;
-            document.getElementById('current-status').innerHTML = statusHtml;
+                `;
+                document.getElementById('current-status').innerHTML = statusHtml;
+            }
         }
 
         async function cancelChargeRequest() {
             if (confirm('确定要取消充电请求吗？')) {
-                showNotification('充电请求已取消', 'warning');
-                document.getElementById('current-status').innerHTML = `
-                    <div class="text-center py-8 text-gray-500">
-                        暂无充电任务
-                    </div>
-                `;
+                try {
+                    const vehicleId = currentVehicleId;
+                    if (!vehicleId) return;
+                    
+                    await axios.post('http://10.255.43.112:8000/api/user/charge/cancel', {
+                        vehicle_id: vehicleId
+                    });
+                    
+                    showNotification('充电请求已取消', 'warning');
+                    document.getElementById('current-status').innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            暂无充电任务
+                        </div>
+                    `;
+                    currentVehicleId = null;
+                } catch (error) {
+                    console.error('Error cancelling charge request:', error);
+                    showNotification('取消失败，请重试', 'error');
+                }
             }
         }
 
@@ -533,151 +578,181 @@
         }
 
         async function loadDetails(type) {
-            const details = [
-                {
-                    order_id: 'ORD20260419001',
-                    pile_id: 'P001',
-                    electricity: 25.5,
-                    duration: 3600,
-                    start_time: '2026-04-19T10:00:00',
-                    electricity_fee: 20.4,
-                    service_fee: 2.55,
-                    total_fee: 22.95
-                },
-                {
-                    order_id: 'ORD20260419002',
-                    pile_id: 'P003',
-                    electricity: 40.0,
-                    duration: 5400,
-                    start_time: '2026-04-18T15:00:00',
-                    electricity_fee: 32.0,
-                    service_fee: 4.0,
-                    total_fee: 36.0
-                }
-            ];
+            try {
+                const vehicleId = document.getElementById('vid').value;
+                const response = await axios.get(`http://10.255.43.112:8000/api/user/orders/${vehicleId}`);
+                const details = response.data;
 
-            let html = '';
-            details.forEach(d => {
-                html += `
-                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="font-semibold text-gray-800">${d.order_id}</span>
-                            <span class="text-blue-600 font-bold">¥${d.total_fee.toFixed(2)}</span>
+                let html = '';
+                details.forEach(d => {
+                    html += `
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-semibold text-gray-800">${d.order_id}</span>
+                                <span class="text-blue-600 font-bold">¥${d.total_fee.toFixed(2)}</span>
+                            </div>
+                            <div class="text-sm text-gray-500 space-y-1">
+                                <p>充电桩: ${d.pile_id} | 电量: ${d.electricity.toFixed(2)}度</p>
+                                <p>时长: ${formatDuration(d.duration)}</p>
+                                <p>时间: ${formatDateTime(d.start_time)}</p>
+                            </div>
                         </div>
-                        <div class="text-sm text-gray-500 space-y-1">
-                            <p>充电桩: ${d.pile_id} | 电量: ${d.electricity.toFixed(2)}度</p>
-                            <p>时长: ${formatDuration(d.duration)}</p>
-                            <p>时间: ${formatDateTime(d.start_time)}</p>
-                        </div>
-                    </div>
-                `;
-            });
+                    `;
+                });
 
-            document.getElementById('detail-list').innerHTML = html || '<div class="text-center py-8 text-gray-500">暂无记录</div>';
+                document.getElementById('detail-list').innerHTML = html || '<div class="text-center py-8 text-gray-500">暂无记录</div>';
+            } catch (error) {
+                console.error('Error fetching order details:', error);
+                document.getElementById('detail-list').innerHTML = '<div class="text-center py-8 text-gray-500">暂无记录</div>';
+            }
         }
 
         async function loadQueueList() {
-            const fastQueue = [
-                { vehicle_id: '京B12345', capacity: 30, queue_num: 'F1' },
-                { vehicle_id: '京C67890', capacity: 25, queue_num: 'F2' }
-            ];
+            try {
+                const response = await axios.get('http://10.255.43.112:8000/api/queue/list');
+                const queue = response.data;
+                
+                const fastQueue = queue.filter(q => q.queue_id.startsWith('F'));
+                const slowQueue = queue.filter(q => q.queue_id.startsWith('T'));
 
-            const slowQueue = [
-                { vehicle_id: '京D11111', capacity: 50, queue_num: 'T1' }
-            ];
+                document.getElementById('queue-total').textContent = queue.length;
 
-            document.getElementById('queue-total').textContent = fastQueue.length + slowQueue.length;
+                let html = '';
 
-            let html = '';
+                if (chargeMode === 'Fast') {
+                    html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
+                        <div class="text-gray-600">前方等待</div>
+                        <div class="text-3xl font-bold text-blue-600 my-2">${fastQueue.length}</div>
+                        <div class="text-gray-500 text-sm">辆快充车辆</div>
+                    </div>`;
+                } else {
+                    html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
+                        <div class="text-gray-600">前方等待</div>
+                        <div class="text-3xl font-bold text-blue-600 my-2">${slowQueue.length}</div>
+                        <div class="text-gray-500 text-sm">辆慢充车辆</div>
+                    </div>`;
+                }
 
-            if (chargeMode === 'Fast') {
-                html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
+                document.getElementById('queue-list').innerHTML = html;
+            } catch (error) {
+                console.error('Error fetching queue list:', error);
+                document.getElementById('queue-total').textContent = '0';
+                document.getElementById('queue-list').innerHTML = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
                     <div class="text-gray-600">前方等待</div>
-                    <div class="text-3xl font-bold text-blue-600 my-2">${fastQueue.length}</div>
-                    <div class="text-gray-500 text-sm">辆快充车辆</div>
-                </div>`;
-            } else {
-                html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-                    <div class="text-gray-600">前方等待</div>
-                    <div class="text-3xl font-bold text-blue-600 my-2">${slowQueue.length}</div>
-                    <div class="text-gray-500 text-sm">辆慢充车辆</div>
+                    <div class="text-3xl font-bold text-blue-600 my-2">0</div>
+                    <div class="text-gray-500 text-sm">辆${chargeMode === 'Fast' ? '快充' : '慢充'}车辆</div>
                 </div>`;
             }
-
-            document.getElementById('queue-list').innerHTML = html;
         }
 
         async function loadPileStatus() {
-            const fastPiles = [
-                { pile_id: 'P001', status: 'CHARGING', vehicle_id: '京A88888', soc: 0.65, target_soc: 0.9 },
-                { pile_id: 'P002', status: 'IDLE', vehicle_id: null },
-                { pile_id: 'P003', status: 'CHARGING', vehicle_id: '京B66666', soc: 0.45, target_soc: 0.8 }
-            ];
+            try {
+                const response = await axios.get('http://10.255.43.112:8000/api/pile/status');
+                const piles = response.data;
+                
+                const fastPiles = piles.filter(p => p.pile_id.startsWith('P001') || p.pile_id.startsWith('P002') || p.pile_id.startsWith('P003'));
+                const slowPiles = piles.filter(p => p.pile_id.startsWith('P004') || p.pile_id.startsWith('P005'));
 
-            const slowPiles = [
-                { pile_id: 'P004', status: 'CHARGING', vehicle_id: '京C99999', soc: 0.30, target_soc: 0.9 },
-                { pile_id: 'P005', status: 'IDLE', vehicle_id: null }
-            ];
+                const fastAvailable = fastPiles.filter(p => p.status === '空闲').length;
+                const slowAvailable = slowPiles.filter(p => p.status === '空闲').length;
 
-            const fastAvailable = fastPiles.filter(p => p.status === 'IDLE').length;
-            const slowAvailable = slowPiles.filter(p => p.status === 'IDLE').length;
+                document.getElementById('fast-available-count').textContent = fastAvailable;
+                document.getElementById('slow-available-count').textContent = slowAvailable;
 
-            document.getElementById('fast-available-count').textContent = fastAvailable;
-            document.getElementById('slow-available-count').textContent = slowAvailable;
+                let fastHtml = '';
+                fastPiles.forEach(p => {
+                    const isCharging = p.status === '充电中';
 
-            let fastHtml = '';
-            fastPiles.forEach(p => {
-                const socPercent = Math.floor(p.soc * 100);
-                const isCharging = p.status === 'CHARGING';
-
-                fastHtml += `
-                    <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
-                            <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
-                                ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
-                            </div>
-                            ${isCharging ? `
-                                <div class="text-sm mb-2 text-gray-600">${p.vehicle_id}</div>
-                                <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
-                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                    fastHtml += `
+                        <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
+                            <div class="text-center">
+                                <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
+                                <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
+                                    ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
                                 </div>
-                                <div class="text-xs text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</div>
-                            ` : `
-                                <div class="text-sm text-gray-400">等待车辆</div>
-                            `}
+                                ${isCharging ? `
+                                    <div class="text-sm mb-2 text-gray-600">${p.current_user}</div>
+                                    <div class="text-xs text-gray-500 mb-1">
+                                        已充: ${p.charged_electricity.toFixed(1)}度 | 时长: ${formatDuration(p.charged_duration)}
+                                    </div>
+                                ` : `
+                                    <div class="text-sm text-gray-400">等待车辆</div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                });
+                document.getElementById('fast-piles').innerHTML = fastHtml;
+
+                let slowHtml = '';
+                slowPiles.forEach(p => {
+                    const isCharging = p.status === '充电中';
+
+                    slowHtml += `
+                        <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
+                            <div class="text-center">
+                                <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
+                                <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
+                                    ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
+                                </div>
+                                ${isCharging ? `
+                                    <div class="text-sm mb-2 text-gray-600">${p.current_user}</div>
+                                    <div class="text-xs text-gray-500 mb-1">
+                                        已充: ${p.charged_electricity.toFixed(1)}度 | 时长: ${formatDuration(p.charged_duration)}
+                                    </div>
+                                ` : `
+                                    <div class="text-sm text-gray-400">等待车辆</div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                });
+                document.getElementById('slow-piles').innerHTML = slowHtml;
+            } catch (error) {
+                console.error('Error fetching pile status:', error);
+                // 显示默认状态
+                document.getElementById('fast-available-count').textContent = '1';
+                document.getElementById('slow-available-count').textContent = '1';
+                document.getElementById('fast-piles').innerHTML = `
+                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">P001</div>
+                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
+                            <div class="text-sm text-gray-400">等待车辆</div>
+                        </div>
+                    </div>
+                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">P002</div>
+                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
+                            <div class="text-sm text-gray-400">等待车辆</div>
+                        </div>
+                    </div>
+                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">P003</div>
+                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
+                            <div class="text-sm text-gray-400">等待车辆</div>
                         </div>
                     </div>
                 `;
-            });
-            document.getElementById('fast-piles').innerHTML = fastHtml;
-
-            let slowHtml = '';
-            slowPiles.forEach(p => {
-                const socPercent = Math.floor(p.soc * 100);
-                const isCharging = p.status === 'CHARGING';
-
-                slowHtml += `
-                    <div class="card bg-white p-4 rounded-lg ${isCharging ? 'border-2 border-green-500' : ''} hover:shadow-md transition-shadow">
+                document.getElementById('slow-piles').innerHTML = `
+                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
                         <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">${p.pile_id}</div>
-                            <div class="text-xs mb-2 ${isCharging ? 'text-green-600' : 'text-gray-400'}">
-                                ${isCharging ? '🟢 充电中' : '⚪ 空闲'}
-                            </div>
-                            ${isCharging ? `
-                                <div class="text-sm mb-2 text-gray-600">${p.vehicle_id}</div>
-                                <div class="w-full bg-gray-200 rounded-full h-2 mb-1">
-                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
-                                </div>
-                                <div class="text-xs text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</div>
-                            ` : `
-                                <div class="text-sm text-gray-400">等待车辆</div>
-                            `}
+                            <div class="font-bold text-lg mb-2 text-gray-800">P004</div>
+                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
+                            <div class="text-sm text-gray-400">等待车辆</div>
+                        </div>
+                    </div>
+                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
+                        <div class="text-center">
+                            <div class="font-bold text-lg mb-2 text-gray-800">P005</div>
+                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
+                            <div class="text-sm text-gray-400">等待车辆</div>
                         </div>
                     </div>
                 `;
-            });
-            document.getElementById('slow-piles').innerHTML = slowHtml;
+            }
         }
 
         function showBillModal(orderData) {
@@ -721,11 +796,11 @@
         async function checkVehicleStatus() {
             const vehicleId = document.getElementById('vid').value;
             try {
-                const res = await fetch(`/api/vehicle/status/${vehicleId}`);
+                const res = await fetch(`http://10.255.43.112:8000/api/user/vehicle/status/${vehicleId}`);
                 const data = await res.json();
 
                 if (data.status === 'COMPLETED' && data.order_id) {
-                    const orderRes = await fetch(`/api/order/${data.order_id}`);
+                    const orderRes = await fetch(`http://10.255.43.112:8000/api/order/${data.order_id}`);
                     const orderData = await orderRes.json();
                     showBillModal(orderData);
                 }

@@ -152,19 +152,6 @@
     </div>
 
     <script>
-        const mockOrderData = {
-            order_id: 'ORD20260419001',
-            pile_id: 'P001',
-            electricity: 35.50,
-            duration: 4230,
-            start_time: '2026-04-19T13:20:00',
-            end_time: '2026-04-19T14:30:30',
-            electricity_fee: 28.40,
-            service_fee: 3.55,
-            total_fee: 31.95,
-            payment_status: 'PENDING'
-        };
-
         function getOrderId() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('order_id') || 'ORD000001';
@@ -194,53 +181,65 @@
             document.getElementById('order-details').classList.add('hidden');
             document.getElementById('error').classList.add('hidden');
             
-            await new Promise(resolve => setTimeout(resolve, 800));
+            const orderId = getOrderId();
             
-            const order = mockOrderData;
-            
-            document.getElementById('order-id').textContent = order.order_id;
-            document.getElementById('pile-id').textContent = order.pile_id;
-            document.getElementById('electricity').textContent = `${order.electricity.toFixed(2)} kWh`;
-            document.getElementById('duration').textContent = formatDuration(order.duration);
-            document.getElementById('start-time').textContent = formatDateTime(order.start_time);
-            document.getElementById('end-time').textContent = formatDateTime(order.end_time);
-            document.getElementById('electricity-fee').textContent = `¥${order.electricity_fee.toFixed(2)}`;
-            document.getElementById('service-fee').textContent = `¥${order.service_fee.toFixed(2)}`;
-            document.getElementById('total-fee').textContent = `¥${order.total_fee.toFixed(2)}`;
-            document.getElementById('order-time').textContent = formatDateTime(order.start_time);
-            
-            const chargeTypeBadge = document.getElementById('charge-type-badge');
-            if (order.pile_id.startsWith('P001') || order.pile_id.startsWith('P002') || order.pile_id.startsWith('P003')) {
-                chargeTypeBadge.className = 'badge badge-fast';
-                chargeTypeBadge.textContent = '⚡ 快充';
-            } else {
-                chargeTypeBadge.className = 'badge badge-slow';
-                chargeTypeBadge.textContent = '🔌 慢充';
+            try {
+                const response = await axios.get(`http://10.255.43.112:8000/api/order/${orderId}`);
+                const order = response.data;
+                
+                document.getElementById('order-id').textContent = order.order_id;
+                document.getElementById('pile-id').textContent = order.pile_id;
+                document.getElementById('electricity').textContent = `${order.electricity.toFixed(2)} kWh`;
+                document.getElementById('duration').textContent = formatDuration(order.duration);
+                document.getElementById('start-time').textContent = formatDateTime(order.start_time);
+                document.getElementById('end-time').textContent = formatDateTime(order.end_time);
+                document.getElementById('electricity-fee').textContent = `¥${order.electricity_fee.toFixed(2)}`;
+                document.getElementById('service-fee').textContent = `¥${order.service_fee.toFixed(2)}`;
+                document.getElementById('total-fee').textContent = `¥${order.total_fee.toFixed(2)}`;
+                document.getElementById('order-time').textContent = formatDateTime(order.start_time);
+                
+                const chargeTypeBadge = document.getElementById('charge-type-badge');
+                if (order.pile_id.startsWith('P001') || order.pile_id.startsWith('P002') || order.pile_id.startsWith('P003')) {
+                    chargeTypeBadge.className = 'badge badge-fast';
+                    chargeTypeBadge.textContent = '⚡ 快充';
+                } else {
+                    chargeTypeBadge.className = 'badge badge-slow';
+                    chargeTypeBadge.textContent = '🔌 慢充';
+                }
+                
+                const paymentStatus = document.getElementById('payment-status');
+                if (order.payment_status === 'PAID') {
+                    paymentStatus.className = 'badge badge-success';
+                    paymentStatus.textContent = '已支付';
+                    document.getElementById('pay-button').disabled = true;
+                    document.getElementById('pay-button').textContent = '已支付';
+                    document.getElementById('pay-button').classList.add('opacity-50');
+                } else {
+                    paymentStatus.className = 'badge badge-warning';
+                    paymentStatus.textContent = '待支付';
+                }
+                
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('order-details').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error fetching order details:', error);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.remove('hidden');
+                document.getElementById('error-message').textContent = error.response?.data?.detail || '获取订单信息失败';
             }
-            
-            const paymentStatus = document.getElementById('payment-status');
-            if (order.payment_status === 'PAID') {
-                paymentStatus.className = 'badge badge-success';
-                paymentStatus.textContent = '已支付';
-                document.getElementById('pay-button').disabled = true;
-                document.getElementById('pay-button').textContent = '已支付';
-                document.getElementById('pay-button').classList.add('opacity-50');
-            } else {
-                paymentStatus.className = 'badge badge-warning';
-                paymentStatus.textContent = '待支付';
-            }
-            
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('order-details').classList.remove('hidden');
         }
 
         document.getElementById('pay-button').addEventListener('click', async function() {
             const orderId = getOrderId();
             
             try {
-                mockOrderData.payment_status = 'PAID';
-                alert('支付成功！');
-                window.location.reload();
+                const response = await axios.post(`http://10.255.43.112:8000/api/pay/${orderId}`);
+                if (response.data.success) {
+                    alert('支付成功！');
+                    window.location.reload();
+                } else {
+                    alert('支付失败，请重试');
+                }
             } catch (error) {
                 console.error('Payment error:', error);
                 alert('支付失败，请重试');
