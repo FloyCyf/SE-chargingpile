@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.post("/requests/", response_model=ChargeResponse)
 async def submit_charge_request(req_body: ChargeRequest, request: Request):
-    """提交充电请求: 分配桩资源或进入等待队列"""
+    """提交充电请求（无需认证的兼容接口）"""
     scheduler = request.app.state.scheduler
     result = await scheduler.submit_request(req_body)
     return ChargeResponse(**result)
@@ -20,7 +20,7 @@ async def submit_charge_request(req_body: ChargeRequest, request: Request):
 
 @router.get("/system/dump", response_model=SystemStatusResponse)
 async def get_site_status(request: Request):
-    """(调试探测用) 获取充电站实时状态和队列长度"""
+    """获取充电站实时状态"""
     scheduler = request.app.state.scheduler
     status = scheduler.get_system_status()
     return SystemStatusResponse(**status)
@@ -34,9 +34,9 @@ async def get_bill(order_id: int, request: Request):
         if order is None:
             raise HTTPException(status_code=404, detail="订单不存在")
 
-    # 对已结算的订单，重新计算分时明细用于展示
     detail = None
-    if (order.charge_start_time is not None and order.charge_end_time is not None
+    if (order.charge_start_time is not None
+            and order.charge_end_time is not None
             and order.total_power is not None and order.total_power > 0):
         fee_result = calculate_fee(
             order.charge_start_time, order.charge_end_time, order.total_power)
@@ -48,8 +48,8 @@ async def get_bill(order_id: int, request: Request):
         pile_id=order.pile_id,
         charge_type=order.charge_type,
         status=order.status,
-        start_soc=order.start_soc,
-        target_soc=order.target_soc,
+        requested_kwh=order.requested_kwh or 0.0,
+        queue_number=order.queue_number,
         bill_code=order.bill_code,
         charge_start_time=order.charge_start_time,
         charge_end_time=order.charge_end_time,
@@ -67,7 +67,7 @@ async def get_bill(order_id: int, request: Request):
 
 @router.post("/requests/{order_id}/cancel", response_model=CancelResponse)
 async def cancel_request(order_id: int, request: Request):
-    """取消排队中的充电请求（仅 QUEUING 状态可操作）"""
+    """取消充电请求"""
     scheduler = request.app.state.scheduler
     result = await scheduler.cancel_request(order_id)
     if result['status'] == 'failed':
@@ -77,7 +77,7 @@ async def cancel_request(order_id: int, request: Request):
 
 @router.post("/requests/{order_id}/stop", response_model=StopResponse)
 async def stop_charging(order_id: int, request: Request):
-    """主动停止充电，按已充入电量即时结算"""
+    """主动停止充电"""
     scheduler = request.app.state.scheduler
     result = await scheduler.stop_charging(order_id)
     if result['status'] == 'failed':
