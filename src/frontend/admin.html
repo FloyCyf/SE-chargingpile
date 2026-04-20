@@ -597,7 +597,7 @@
 
         async function poll() {
             try {
-                const res = await fetch('http://10.255.43.112:8000/api/admin/system/dump');
+                const res = await fetch('/api/compat/dump');
                 const data = await res.json();
 
                 updateStats(data);

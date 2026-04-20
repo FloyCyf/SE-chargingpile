@@ -8,6 +8,7 @@ from src.api.routes import router as api_router
 from src.api.auth_routes import router as auth_router
 from src.api.user_routes import router as user_router
 from src.api.admin_routes import router as admin_router
+from src.api.frontend_compat import router as compat_router
 from src.core.scheduler import SmartScheduler
 from src.models.database import init_db, seed_admin
 
@@ -54,6 +55,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
 app.include_router(user_router, prefix="/api/user", tags=["用户"])
 app.include_router(admin_router, prefix="/api/admin", tags=["管理员"])
 app.include_router(api_router, prefix="/api", tags=["兼容"])
+app.include_router(compat_router, prefix="/api", tags=["前端降权兼容"])
 
 # 前端静态文件（放在最后，不覆盖 API 路由）
 app.mount("/", StaticFiles(directory="src/frontend", html=True),

@@ -466,7 +466,7 @@
             };
 
             try {
-                const response = await axios.post('http://10.255.43.112:8000/api/user/charge/request', payload);
+                const response = await axios.post('/api/user/charge/request', payload);
                 
                 showNotification('充电请求已提交成功！', 'success');
                 
@@ -487,7 +487,7 @@
                 const vehicleId = currentVehicleId;
                 if (!vehicleId) return;
                 
-                const response = await axios.get(`http://10.255.43.112:8000/api/user/vehicle/status/${vehicleId}`);
+                const response = await axios.get(`/api/user/vehicle/status/${vehicleId}`);
                 const data = response.data;
                 
                 const capacity = document.getElementById('capacity').value;
@@ -544,7 +544,7 @@
                     const vehicleId = currentVehicleId;
                     if (!vehicleId) return;
                     
-                    await axios.post('http://10.255.43.112:8000/api/user/charge/cancel', {
+                    await axios.post('/api/user/charge/cancel', {
                         vehicle_id: vehicleId
                     });
                     
@@ -580,7 +580,7 @@
         async function loadDetails(type) {
             try {
                 const vehicleId = document.getElementById('vid').value;
-                const response = await axios.get(`http://10.255.43.112:8000/api/user/orders/${vehicleId}`);
+                const response = await axios.get(`/api/user/orders/${vehicleId}`);
                 const details = response.data;
 
                 let html = '';
@@ -609,7 +609,7 @@
 
         async function loadQueueList() {
             try {
-                const response = await axios.get('http://10.255.43.112:8000/api/queue/list');
+                const response = await axios.get('/api/queue/list');
                 const queue = response.data;
                 
                 const fastQueue = queue.filter(q => q.queue_id.startsWith('F'));
@@ -647,7 +647,7 @@
 
         async function loadPileStatus() {
             try {
-                const response = await axios.get('http://10.255.43.112:8000/api/pile/status');
+                const response = await axios.get('/api/pile/status');
                 const piles = response.data;
                 
                 const fastPiles = piles.filter(p => p.pile_id.startsWith('P001') || p.pile_id.startsWith('P002') || p.pile_id.startsWith('P003'));
@@ -793,14 +793,18 @@
             document.getElementById('helpModal').style.display = 'none';
         }
 
+        let lastShownOrderId = null;
         async function checkVehicleStatus() {
             const vehicleId = document.getElementById('vid').value;
+            if (!vehicleId) return;
             try {
-                const res = await fetch(`http://10.255.43.112:8000/api/user/vehicle/status/${vehicleId}`);
+                const res = await fetch(`/api/user/vehicle/status/${vehicleId}`);
                 const data = await res.json();
 
                 if (data.status === 'COMPLETED' && data.order_id) {
-                    const orderRes = await fetch(`http://10.255.43.112:8000/api/order/${data.order_id}`);
+                    if (lastShownOrderId === data.order_id) return;
+                    lastShownOrderId = data.order_id;
+                    const orderRes = await fetch(`/api/order/${data.order_id}`);
                     const orderData = await orderRes.json();
                     showBillModal(orderData);
                 }
