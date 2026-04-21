@@ -119,9 +119,17 @@ async def get_orders(vehicle_id: str):
     out = []
     for o in orders:
         out.append({
-            "order_id": o.id, "pile_id": o.pile_id, "electricity": o.total_power or 0,
-            "duration": o.charge_duration or 0, "total_fee": o.total_fee or 0,
-            "start_time": o.created_at.isoformat()
+            "order_id": o.id,
+            "bill_code": o.bill_code or f"Order-{o.id}", 
+            "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
+            "pile_id": o.pile_id or "--", 
+            "electricity": o.total_power or 0,
+            "duration": o.charge_duration or 0, 
+            "start_time": o.charge_start_time.isoformat() if getattr(o, "charge_start_time", None) else "--",
+            "end_time": o.charge_end_time.isoformat() if getattr(o, "charge_end_time", None) else "--",
+            "power_fee": o.power_fee or 0,
+            "service_fee": o.service_fee or 0,
+            "total_fee": o.total_fee or 0
         })
     return out
 

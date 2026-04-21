@@ -515,8 +515,12 @@
                             <input type="number" id="slow-pile-count" min="1" max="10" value="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">等候区容量</label>
+                            <label class="block text-sm text-gray-500 mb-2">等候区容量 (N)</label>
                             <input type="number" id="waiting-area-size" min="1" max="50" value="10" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">充电桩队长度 (M)</label>
+                            <input type="number" id="pile-queue-length" min="1" max="10" value="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <button onclick="savePileSettings()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
                             保存设置
@@ -868,48 +872,62 @@
             document.getElementById('queue-details').innerHTML = detailsHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
         }
 
-        function loadReportData() {
-            const reportData = [
-                { time: '04-19 10:00', pile_id: 'P001', type: 'Fast', count: 5, duration: 10800, electricity: 90, elec_fee: 72, service_fee: 9, total: 81 },
-                { time: '04-19 08:00', pile_id: 'P002', type: 'Fast', count: 4, duration: 7200, electricity: 60, elec_fee: 48, service_fee: 6, total: 54 },
-                { time: '04-19 06:00', pile_id: 'P003', type: 'Fast', count: 3, duration: 5400, electricity: 45, elec_fee: 36, service_fee: 4.5, total: 40.5 },
-                { time: '04-18 22:00', pile_id: 'P004', type: 'Slow', count: 6, duration: 21600, electricity: 60, elec_fee: 48, service_fee: 6, total: 54 },
-                { time: '04-18 18:00', pile_id: 'P005', type: 'Slow', count: 4, duration: 14400, electricity: 40, elec_fee: 32, service_fee: 4, total: 36 }
-            ];
+        async function loadReportData() {
+            try {
+                const res = await fetch('/api/compat/dump');
+                const data = await res.json();
+                
+                const periodLabel = currentPeriod === 'day' ? '今日' : currentPeriod === 'week' ? '本周' : '本月';
+                
+                const reportData = data.piles.map(p => ({
+                    time: periodLabel,
+                    pile_id: p.pile_id,
+                    type: p.type,
+                    count: p.total_charge_count || 0,
+                    duration: (p.total_charge_duration || 0) * 3600, // convert hours to seconds for formatDuration
+                    electricity: p.total_charge_amount || 0,
+                    elec_fee: p.total_power_fee || 0,
+                    service_fee: p.total_service_fee || 0,
+                    total: p.total_total_fee || 0
+                }));
 
-            let totalCount = 0, totalDuration = 0, totalElec = 0, totalRevenue = 0;
+                let totalCount = 0, totalDuration = 0, totalElec = 0, totalRevenue = 0;
+                let html = '';
+                
+                reportData.forEach(d => {
+                    totalCount += d.count;
+                    totalDuration += d.duration;
+                    totalElec += d.electricity;
+                    totalRevenue += d.total;
 
-            let html = '';
-            reportData.forEach(d => {
-                totalCount += d.count;
-                totalDuration += d.duration;
-                totalElec += d.electricity;
-                totalRevenue += d.total;
+                    html += `
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-gray-600 font-medium">${d.time}</td>
+                            <td class="px-4 py-3 text-sm text-gray-800 font-medium">${d.pile_id}</td>
+                            <td class="px-4 py-3">
+                                <span class="${d.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                                    ${d.type === 'Fast' ? '快充' : '慢充'}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">${d.count} 次</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">${formatDuration(d.duration)}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">${d.electricity.toFixed(2)} 度</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">¥${d.elec_fee.toFixed(2)}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">¥${d.service_fee.toFixed(2)}</td>
+                            <td class="px-4 py-3 text-sm font-bold text-blue-600">¥${d.total.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
 
-                html += `
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
-                        <td class="px-4 py-3 text-sm text-gray-600">${d.time}</td>
-                        <td class="px-4 py-3 text-sm text-gray-800 font-medium">${d.pile_id}</td>
-                        <td class="px-4 py-3">
-                            <span class="${d.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
-                                ${d.type === 'Fast' ? '快充' : '慢充'}
-                            </span>
-                        </td>
-                        <td class="px-4 py-3 text-sm text-gray-600">${d.count}</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">${formatDuration(d.duration)}</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">${d.electricity}度</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">¥${d.elec_fee}</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">¥${d.service_fee}</td>
-                        <td class="px-4 py-3 text-sm text-blue-600 font-semibold">¥${d.total}</td>
-                    </tr>
-                `;
-            });
-            document.getElementById('report-table').innerHTML = html;
-
-            document.getElementById('report-count').innerText = totalCount;
-            document.getElementById('report-duration').innerText = formatDuration(totalDuration);
-            document.getElementById('report-electricity').innerText = totalElec + '度';
-            document.getElementById('report-revenue').innerText = '¥' + totalRevenue.toFixed(0);
+                document.getElementById('report-table').innerHTML = html || '<tr><td colspan="9" class="text-center py-4 text-gray-500">暂无数据</td></tr>';
+                document.getElementById('report-count').textContent = totalCount;
+                document.getElementById('report-duration').textContent = formatDuration(totalDuration);
+                document.getElementById('report-electricity').textContent = totalElec.toFixed(2) + ' 度';
+                document.getElementById('report-revenue').textContent = '¥' + totalRevenue.toFixed(2);
+            } catch (e) {
+                console.error("Failed to load report data:", e);
+                document.getElementById('report-table').innerHTML = '<tr><td colspan="9" class="text-center py-4 text-red-500">加载失败</td></tr>';
+            }
         }
 
         function exportReport() {

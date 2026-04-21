@@ -643,15 +643,23 @@
                 let html = '';
                 details.forEach(d => {
                     html += `
-                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-semibold text-gray-800">${d.order_id}</span>
-                                <span class="text-blue-600 font-bold">¥${d.total_fee.toFixed(2)}</span>
+                        <div class="bg-gray-50 p-5 rounded-lg border border-gray-200 shadow-sm relative">
+                            <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                                <span class="font-bold text-gray-800 text-sm">详单: ${d.bill_code}</span>
+                                <span class="text-blue-600 font-bold">总计: ¥${d.total_fee.toFixed(2)}</span>
                             </div>
-                            <div class="text-sm text-gray-500 space-y-1">
-                                <p>充电桩: ${d.pile_id} | 电量: ${d.electricity.toFixed(2)}度</p>
-                                <p>时长: ${formatDuration(d.duration)}</p>
-                                <p>时间: ${formatDateTime(d.start_time)}</p>
+                            <div class="grid grid-cols-2 gap-y-2 text-xs text-gray-600">
+                                <div><span class="text-gray-400">桩编号:</span> <span class="font-medium">${d.pile_id}</span></div>
+                                <div><span class="text-gray-400">电量:</span> <span class="font-medium">${d.electricity.toFixed(2)} kWh</span></div>
+                                
+                                <div><span class="text-gray-400">电费:</span> <span class="font-medium">¥${d.power_fee.toFixed(2)}</span></div>
+                                <div><span class="text-gray-400">服务费:</span> <span class="font-medium">¥${d.service_fee.toFixed(2)}</span></div>
+                                
+                                <div class="col-span-2"><span class="text-gray-400">时长:</span> <span class="font-medium">${formatDuration(d.duration)}</span></div>
+                                <div class="col-span-2"><span class="text-gray-400">生成时间:</span> <span class="font-medium">${d.created_at ? formatDateTime(d.created_at) : '--'}</span></div>
+                                
+                                <div class="col-span-2"><span class="text-gray-400">启动时间:</span> <span class="font-medium">${d.start_time !== '--' ? formatDateTime(d.start_time) : '--'}</span></div>
+                                <div class="col-span-2"><span class="text-gray-400">停止时间:</span> <span class="font-medium">${d.end_time !== '--' ? formatDateTime(d.end_time) : '--'}</span></div>
                             </div>
                         </div>
                     `;
