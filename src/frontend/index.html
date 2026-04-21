@@ -6,41 +6,96 @@
     <title>车辆端 | BUPT 智能充电系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        blue: { 50: '#f4f6f8', 100: '#e4e8eb', 200: '#c5ced6', 500: '#7d94a6', 600: '#627a8e', 700: '#4d6273' },
+                        green: { 50: '#f3f6f3', 100: '#e2e9e2', 500: '#88a388', 600: '#6e896e' },
+                        orange: { 500: '#c6957a', 600: '#ad7e64' },
+                        red: { 50: '#f8f4f4', 500: '#c88c8c', 600: '#ad7272' },
+                        yellow: { 500: '#d4b483' },
+                        gray: { 50: '#faf9f8', 100: '#f3f1ec', 200: '#e8e4da', 300: '#d1ccc0', 400: '#ada89c', 500: '#8f8a7e', 600: '#736e64', 800: '#423f3a', 900: '#2b2925' }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f2f5;
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(-45deg, #e0c3fc, #8ec5fc, #fbc2eb, #a18cd1);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.3) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4) !important;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05) !important;
         }
 
         .card {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            background: rgba(255, 255, 255, 0.45) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6) !important;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
             transition: all 0.3s ease;
+            border-radius: 16px;
         }
 
         .card:hover {
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+            background: rgba(255, 255, 255, 0.55) !important;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .bg-blue-50, .bg-gray-50 {
+            background: rgba(255, 255, 255, 0.3) !important;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
         }
 
         .btn-primary {
-            background-color: #165DFF;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
             transition: all 0.3s ease;
         }
 
         .btn-primary:hover {
-            background-color: #0E42C2;
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
         }
 
         .btn-secondary {
-            background-color: #6B7280;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            color: #4a5568 !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
             transition: all 0.3s ease;
         }
 
         .btn-secondary:hover {
-            background-color: #4B5563;
-            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.6);
+            transform: translateY(-2px);
         }
 
         .badge {
@@ -51,33 +106,39 @@
         }
 
         .badge-fast {
-            background-color: #FFF7ED;
-            color: #EA580C;
+            background-color: rgba(253, 245, 240, 0.7);
+            color: #ad7e64;
+            border: 1px solid rgba(173, 126, 100, 0.3);
         }
 
         .badge-slow {
-            background-color: #EFF6FF;
-            color: #2563EB;
+            background-color: rgba(244, 246, 248, 0.7);
+            color: #627a8e;
+            border: 1px solid rgba(98, 122, 142, 0.3);
         }
 
         .badge-success {
-            background-color: #E8F5E9;
-            color: #2E7D32;
+            background-color: rgba(243, 246, 243, 0.7);
+            color: #6e896e;
+            border: 1px solid rgba(110, 137, 110, 0.3);
         }
 
         .badge-warning {
-            background-color: #FFF3E0;
-            color: #E65100;
+            background-color: rgba(252, 246, 235, 0.7);
+            color: #d4b483;
+            border: 1px solid rgba(212, 180, 131, 0.3);
         }
 
         .badge-error {
-            background-color: #FEF2F2;
-            color: #DC2626;
+            background-color: rgba(248, 244, 244, 0.7);
+            color: #c88c8c;
+            border: 1px solid rgba(200, 140, 140, 0.3);
         }
 
         .tab-active {
-            border-bottom: 2px solid #165DFF;
-            color: #165DFF;
+            border-bottom: 2px solid #764ba2;
+            color: #764ba2;
+            font-weight: 600;
         }
 
         .modal {
@@ -86,7 +147,8 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -95,6 +157,11 @@
         }
 
         .modal-content {
+            background: rgba(255, 255, 255, 0.7) !important;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
             animation: slideIn 0.3s ease;
         }
 
@@ -112,8 +179,8 @@
             display: inline-block;
             width: 20px;
             height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #165DFF;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid #fff;
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -140,15 +207,18 @@
         }
 
         .success-notification {
-            background-color: #22c55e;
+            background-color: rgba(136, 163, 136, 0.9);
+            backdrop-filter: blur(10px);
         }
 
         .error-notification {
-            background-color: #ef4444;
+            background-color: rgba(200, 140, 140, 0.9);
+            backdrop-filter: blur(10px);
         }
 
         .warning-notification {
-            background-color: #f59e0b;
+            background-color: rgba(212, 180, 131, 0.9);
+            backdrop-filter: blur(10px);
         }
     </style>
 </head>
@@ -166,7 +236,7 @@
             <div class="flex items-center space-x-4">
                 <div class="text-right">
                     <p class="text-sm text-gray-500">当前用户</p>
-                    <p class="text-sm font-medium text-gray-800" id="current-user">京A88888</p>
+                    <p class="text-sm font-medium text-gray-800" id="current-user">未登录</p>
                 </div>
                 <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -186,7 +256,7 @@
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm text-gray-500 mb-2">车牌标识</label>
-                        <input type="text" id="vid" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" value="京A88888" placeholder="请输入车牌号码">
+                        <input type="text" id="vid" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" value="" placeholder="请输入车牌号码（例如京A88888）">
                     </div>
 
                     <div>
@@ -375,7 +445,7 @@
 
     <script>
         let chargeMode = 'Fast';
-        let currentVehicleId = '京A88888';
+        let currentVehicleId = '';
 
         function setChargeMode(mode) {
             chargeMode = mode;
@@ -513,28 +583,7 @@
                 document.getElementById('current-status').innerHTML = statusHtml;
             } catch (error) {
                 console.error('Error updating current status:', error);
-                // 显示默认状态
-                const capacity = document.getElementById('capacity').value;
-                const statusHtml = `
-                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="font-semibold text-gray-800">${currentVehicleId}</span>
-                            <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
-                                ${chargeMode === 'Fast' ? '快充' : '慢充'}
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600 space-y-1">
-                            <p>排队号码: <span class="font-semibold text-gray-800">${chargeMode === 'Fast' ? 'F1' : 'T1'}</span></p>
-                            <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
-                            <p>前车等待: <span class="text-orange-500 font-semibold">2辆</span></p>
-                            <p>预计等待: <span class="text-blue-600 font-semibold">15分钟</span></p>
-                        </div>
-                        <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
-                            取消充电
-                        </button>
-                    </div>
-                `;
-                document.getElementById('current-status').innerHTML = statusHtml;
+                document.getElementById('current-status').innerHTML = '<div class="text-center py-8 text-gray-500">暂无充电任务</div>';
             }
         }
 
@@ -580,6 +629,10 @@
         async function loadDetails(type) {
             try {
                 const vehicleId = document.getElementById('vid').value;
+                if (!vehicleId) {
+                    document.getElementById('detail-list').innerHTML = '<div class="text-center py-8 text-gray-500">请输入车牌号以查看详情</div>';
+                    return;
+                }
                 const response = await axios.get(`/api/user/orders/${vehicleId}`);
                 const details = response.data;
 
@@ -638,9 +691,9 @@
                 console.error('Error fetching queue list:', error);
                 document.getElementById('queue-total').textContent = '0';
                 document.getElementById('queue-list').innerHTML = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-                    <div class="text-gray-600">前方等待</div>
+                    <div class="text-gray-600">系统未连接或暂无排队</div>
                     <div class="text-3xl font-bold text-blue-600 my-2">0</div>
-                    <div class="text-gray-500 text-sm">辆${chargeMode === 'Fast' ? '快充' : '慢充'}车辆</div>
+                    <div class="text-gray-500 text-sm">辆等候车辆</div>
                 </div>`;
             }
         }
@@ -650,8 +703,8 @@
                 const response = await axios.get('/api/pile/status');
                 const piles = response.data;
                 
-                const fastPiles = piles.filter(p => p.pile_id.startsWith('P001') || p.pile_id.startsWith('P002') || p.pile_id.startsWith('P003'));
-                const slowPiles = piles.filter(p => p.pile_id.startsWith('P004') || p.pile_id.startsWith('P005'));
+                const fastPiles = piles.filter(p => (p.pile_id || '').startsWith('F'));
+                const slowPiles = piles.filter(p => (p.pile_id || '').startsWith('T'));
 
                 const fastAvailable = fastPiles.filter(p => p.status === '空闲').length;
                 const slowAvailable = slowPiles.filter(p => p.status === '空闲').length;
@@ -710,48 +763,10 @@
                 document.getElementById('slow-piles').innerHTML = slowHtml;
             } catch (error) {
                 console.error('Error fetching pile status:', error);
-                // 显示默认状态
-                document.getElementById('fast-available-count').textContent = '1';
-                document.getElementById('slow-available-count').textContent = '1';
-                document.getElementById('fast-piles').innerHTML = `
-                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">P001</div>
-                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
-                            <div class="text-sm text-gray-400">等待车辆</div>
-                        </div>
-                    </div>
-                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">P002</div>
-                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
-                            <div class="text-sm text-gray-400">等待车辆</div>
-                        </div>
-                    </div>
-                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">P003</div>
-                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
-                            <div class="text-sm text-gray-400">等待车辆</div>
-                        </div>
-                    </div>
-                `;
-                document.getElementById('slow-piles').innerHTML = `
-                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">P004</div>
-                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
-                            <div class="text-sm text-gray-400">等待车辆</div>
-                        </div>
-                    </div>
-                    <div class="card bg-white p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <div class="text-center">
-                            <div class="font-bold text-lg mb-2 text-gray-800">P005</div>
-                            <div class="text-xs mb-2 text-gray-400">⚪ 空闲</div>
-                            <div class="text-sm text-gray-400">等待车辆</div>
-                        </div>
-                    </div>
-                `;
+                document.getElementById('fast-available-count').textContent = '0';
+                document.getElementById('slow-available-count').textContent = '0';
+                document.getElementById('fast-piles').innerHTML = '<div class="text-sm text-gray-500">无法获取充电桩状态</div>';
+                document.getElementById('slow-piles').innerHTML = '<div class="text-sm text-gray-500">无法获取充电桩状态</div>';
             }
         }
 
@@ -794,20 +809,34 @@
         }
 
         let lastShownOrderId = null;
+        let lastVehicleState = null;
+
         async function checkVehicleStatus() {
             const vehicleId = document.getElementById('vid').value;
-            if (!vehicleId) return;
+            if (!vehicleId) {
+                lastVehicleState = null;
+                return;
+            }
             try {
                 const res = await fetch(`/api/user/vehicle/status/${vehicleId}`);
+                if (!res.ok) return;
                 const data = await res.json();
 
                 if (data.status === 'COMPLETED' && data.order_id) {
-                    if (lastShownOrderId === data.order_id) return;
-                    lastShownOrderId = data.order_id;
-                    const orderRes = await fetch(`/api/order/${data.order_id}`);
-                    const orderData = await orderRes.json();
-                    showBillModal(orderData);
+                    if (lastVehicleState && lastVehicleState !== 'COMPLETED' && lastShownOrderId !== data.order_id) {
+                        lastShownOrderId = data.order_id;
+                        const orderRes = await fetch(`/api/order/${data.order_id}`);
+                        if (orderRes.ok) {
+                            const orderData = await orderRes.json();
+                            showBillModal(orderData);
+                        }
+                    } else if (lastVehicleState === null) {
+                        // 初始化时不弹窗，仅记录防止旧账单弹出
+                        lastShownOrderId = data.order_id;
+                    }
                 }
+                
+                lastVehicleState = data.status;
             } catch (e) {
                 // 静默忽略，继续轮询
             }
