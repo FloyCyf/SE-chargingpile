@@ -82,12 +82,12 @@ async def cancel_charge(body: CancelReqBody, request: Request):
 
 @router.get("/queue/list")
 async def get_queue_list(request: Request):
-    status = request.app.state.scheduler.get_system_status()
+    qdata = request.app.state.scheduler.get_waiting_area()
     result = []
-    for q in status.get("fast_queue", []):
-        result.append({"queue_id": "F", "vehicle_id": q["vehicle_id"], "queue_duration": q.get('queue_duration', 0), "requested_capacity": q.get('requested_kwh', 0)})
-    for q in status.get("slow_queue", []):
-        result.append({"queue_id": "T", "vehicle_id": q["vehicle_id"], "queue_duration": q.get('queue_duration', 0), "requested_capacity": q.get('requested_kwh', 0)})
+    for q in qdata.get("fast_waiting", []):
+        result.append({"queue_id": q.get("queue_number", "F"), "vehicle_id": q.get("vehicle_id", ""), "queue_duration": 0, "requested_capacity": q.get("requested_kwh", 0)})
+    for q in qdata.get("slow_waiting", []):
+        result.append({"queue_id": q.get("queue_number", "T"), "vehicle_id": q.get("vehicle_id", ""), "queue_duration": 0, "requested_capacity": q.get("requested_kwh", 0)})
     return result
 
 @router.get("/pile/status")
