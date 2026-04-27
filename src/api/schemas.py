@@ -31,6 +31,30 @@ class UserInfo(BaseModel):
     vehicle_id: Optional[str] = None
 
 
+# ---- 车辆管理 ----
+
+class VehicleCreate(BaseModel):
+    vehicle_id: str = Field(..., description="车牌号")
+    battery_capacity_kwh: float = Field(..., gt=0, description="电池最大容量(kWh)")
+    current_kwh: float = Field(0.0, ge=0, description="当前电池电量(kWh)")
+
+
+class VehicleUpdate(BaseModel):
+    battery_capacity_kwh: Optional[float] = Field(None, gt=0, description="电池最大容量(kWh)")
+    current_kwh: Optional[float] = Field(None, ge=0, description="当前电池电量(kWh)")
+
+
+class VehicleResponse(BaseModel):
+    vehicle_id: str
+    battery_capacity_kwh: float
+    current_kwh: float
+    owner_id: Optional[int] = None
+
+
+class VehicleListResponse(BaseModel):
+    vehicles: List[VehicleResponse]
+
+
 # ---- 充电请求 ----
 
 class ChargeRequest(BaseModel):
@@ -111,10 +135,28 @@ class QueuePositionResponse(BaseModel):
 
 # ---- 计费与账单 ----
 
+class FeeSegment(BaseModel):
+    """单个连续时段段"""
+    period: str = ""
+    start: str = ""
+    end: str = ""
+    minutes: int = 0
+    kwh: float = 0.0
+    rate: float = 0.0
+    fee: float = 0.0
+
+
 class FeeDetail(BaseModel):
     peak_minutes: int = 0
     flat_minutes: int = 0
     valley_minutes: int = 0
+    peak_kwh: float = 0.0
+    peak_fee: float = 0.0
+    flat_kwh: float = 0.0
+    flat_fee: float = 0.0
+    valley_kwh: float = 0.0
+    valley_fee: float = 0.0
+    segments: List[FeeSegment] = []
 
 
 class BillResponse(BaseModel):
@@ -226,3 +268,79 @@ class OrderSummary(BaseModel):
 
 class OrderListResponse(BaseModel):
     orders: List[OrderSummary]
+
+
+# ---- 充电桩状态日志 ----
+
+class PileStatusLogItem(BaseModel):
+    id: int
+    pile_id: str
+    old_status: str
+    new_status: str
+    reason: Optional[str] = None
+    operator: str = "system"
+    changed_at: Optional[datetime] = None
+
+
+class PileStatusLogResponse(BaseModel):
+    logs: List[PileStatusLogItem]
+    total: int = 0
+
+
+# ---- 账单与详单（管理员查询） ----
+
+class BillDetailItem(BaseModel):
+    """详单条目：某个连续时段的费用明细"""
+    id: int
+    period: str = ""
+    start_time: str = ""
+    end_time: str = ""
+    duration_minutes: int = 0
+    kwh: float = 0.0
+    rate: float = 0.0
+    fee: float = 0.0
+
+
+class BillItem(BaseModel):
+    """账单条目"""
+    id: int
+    bill_code: str
+    order_id: int
+    vehicle_id: str
+    pile_id: Optional[str] = None
+    charge_type: str
+    charge_start_time: Optional[datetime] = None
+    charge_end_time: Optional[datetime] = None
+    charge_duration: Optional[float] = None
+    total_power: Optional[float] = None
+    power_fee: Optional[float] = None
+    service_fee: Optional[float] = None
+    total_fee: Optional[float] = None
+    created_at: Optional[datetime] = None
+    details: List[BillDetailItem] = []
+
+
+class BillListResponse(BaseModel):
+    bills: List[BillItem]
+    total: int = 0
+
+
+class AdminOrderItem(BaseModel):
+    """管理员订单列表条目"""
+    order_id: int
+    vehicle_id: str
+    charge_type: str
+    requested_kwh: float
+    charged_kwh: float = 0.0
+    queue_number: Optional[str] = None
+    status: str
+    pile_id: Optional[str] = None
+    total_fee: Optional[float] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class AdminOrderListResponse(BaseModel):
+    orders: List[AdminOrderItem]
+    total: int = 0
