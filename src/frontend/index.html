@@ -260,6 +260,17 @@
                     </div>
 
                     <div>
+                        <label class="block text-sm text-gray-500 mb-2">电池最大容量 (kWh)</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="battery-cap" step="0.1" min="1" max="200" value="60" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="电池容量">
+                            <button onclick="registerVehicle()" class="btn-secondary px-4 py-2 rounded-lg text-sm font-medium" id="reg-vehicle-btn">注册车辆</button>
+                        </div>
+                        <div id="vehicle-info" class="mt-2 text-xs text-gray-500 hidden">
+                            <span>已注册 | 电池容量: <span id="v-cap" class="font-semibold">--</span> kWh | 当前电量: <span id="v-current" class="font-semibold">--</span> kWh | 可充: <span id="v-available" class="font-semibold text-green-600">--</span> kWh</span>
+                        </div>
+                    </div>
+
+                    <div>
                         <label class="block text-sm text-gray-500 mb-2">充电模式</label>
                         <div class="grid grid-cols-2 gap-3">
                             <button id="btn-fast" onclick="setChargeMode('Fast')" class="btn-primary py-3 text-white rounded-lg font-medium">
@@ -446,6 +457,81 @@
     <script>
         let chargeMode = 'Fast';
         let currentVehicleId = '';
+        let vehicleRegistered = false;
+        let vehicleBatteryCap = 60;
+        let vehicleCurrentKwh = 0;
+
+        async function registerVehicle() {
+            const vehicleId = document.getElementById('vid').value;
+            const batteryCap = parseFloat(document.getElementById('battery-cap').value);
+
+            if (!vehicleId) {
+                showNotification('请先输入车牌号码', 'error');
+                return;
+            }
+            if (!batteryCap || batteryCap <= 0) {
+                showNotification('请输入有效的电池容量', 'error');
+                return;
+            }
+
+            try {
+                const response = await axios.post('/api/vehicle/register', {
+                    vehicle_id: vehicleId,
+                    battery_capacity_kwh: batteryCap,
+                    current_kwh: 0
+                });
+                const data = response.data;
+                vehicleRegistered = true;
+                vehicleBatteryCap = data.battery_capacity_kwh;
+                vehicleCurrentKwh = data.current_kwh;
+                updateVehicleInfoDisplay();
+
+                if (data.status === 'created') {
+                    showNotification('车辆注册成功！', 'success');
+                } else {
+                    showNotification('车辆已注册，已加载信息', 'success');
+                }
+                updateEstimated();
+            } catch (error) {
+                console.error('Error registering vehicle:', error);
+                showNotification('车辆注册失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
+            }
+        }
+
+        async function loadVehicleInfo(vehicleId) {
+            if (!vehicleId) return;
+            try {
+                const response = await axios.get(`/api/vehicle/info/${vehicleId}`);
+                const data = response.data;
+                if (data.status === 'found') {
+                    vehicleRegistered = true;
+                    vehicleBatteryCap = data.battery_capacity_kwh;
+                    vehicleCurrentKwh = data.current_kwh;
+                    document.getElementById('battery-cap').value = vehicleBatteryCap;
+                    updateVehicleInfoDisplay();
+                } else {
+                    vehicleRegistered = false;
+                    document.getElementById('vehicle-info').classList.add('hidden');
+                }
+            } catch (e) {
+                vehicleRegistered = false;
+            }
+        }
+
+        function updateVehicleInfoDisplay() {
+            const available = Math.max(0, vehicleBatteryCap - vehicleCurrentKwh);
+            document.getElementById('v-cap').textContent = vehicleBatteryCap.toFixed(1);
+            document.getElementById('v-current').textContent = vehicleCurrentKwh.toFixed(1);
+            document.getElementById('v-available').textContent = available.toFixed(1);
+            document.getElementById('vehicle-info').classList.remove('hidden');
+
+            // 限制充电量输入最大值
+            const capInput = document.getElementById('capacity');
+            capInput.max = available;
+            if (parseFloat(capInput.value) > available) {
+                capInput.value = available.toFixed(1);
+            }
+        }
 
         function setChargeMode(mode) {
             chargeMode = mode;
@@ -523,6 +609,37 @@
             if (!capacity || capacity <= 0) {
                 showNotification('请输入有效充电量', 'error');
                 return;
+            }
+
+            // 如果车辆未注册，先自动注册
+            if (!vehicleRegistered) {
+                const batteryCap = parseFloat(document.getElementById('battery-cap').value) || 60;
+                try {
+                    const regRes = await axios.post('/api/vehicle/register', {
+                        vehicle_id: vehicleId,
+                        battery_capacity_kwh: batteryCap,
+                        current_kwh: 0
+                    });
+                    const regData = regRes.data;
+                    vehicleRegistered = true;
+                    vehicleBatteryCap = regData.battery_capacity_kwh;
+                    vehicleCurrentKwh = regData.current_kwh;
+                    updateVehicleInfoDisplay();
+                } catch (e) {
+                    console.error('Auto-register failed:', e);
+                }
+            }
+
+            // 校验充电量不超过可充余量
+            if (vehicleRegistered) {
+                const available = vehicleBatteryCap - vehicleCurrentKwh;
+                if (available <= 0) {
+                    showNotification('车辆电池已满，无需充电', 'error');
+                    return;
+                }
+                if (capacity > available) {
+                    showNotification(`充电量已自动调整为可充余量 ${available.toFixed(1)} kWh`, 'warning');
+                }
             }
 
             // 显示加载状态
@@ -836,6 +953,8 @@
                             const orderData = await orderRes.json();
                             showBillModal(orderData);
                         }
+                        // 充电完成后刷新车辆电量信息
+                        await loadVehicleInfo(vehicleId);
                     } else if (lastVehicleState === null) {
                         // 初始化时不弹窗，仅记录防止旧账单弹出
                         lastShownOrderId = data.order_id;
@@ -856,6 +975,11 @@
 
             // 监听充电量变化
             document.getElementById('capacity').addEventListener('input', updateEstimated);
+
+            // 车牌输入框失焦时自动查询车辆信息
+            document.getElementById('vid').addEventListener('blur', function() {
+                loadVehicleInfo(this.value);
+            });
         }
 
         window.onload = function() {

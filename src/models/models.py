@@ -25,6 +25,21 @@ class User(Base):
     vehicle_id = Column(String(50), nullable=True, comment="关联车牌号")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    vehicles = relationship("Vehicle", backref="owner", foreign_keys="Vehicle.owner_id")
+
+
+class Vehicle(Base):
+    """车辆表：记录车辆信息及电池最大充电容量"""
+    __tablename__ = 'vehicles'
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(String(50), unique=True, nullable=False, comment="车牌号")
+    battery_capacity_kwh = Column(Float, nullable=False, default=60.0,
+                                  comment="电池最大容量(kWh)")
+    current_kwh = Column(Float, default=0.0, comment="当前电池电量(kWh)")
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True,
+                      comment="车主用户ID")
+
 
 class ChargeOrder(Base):
     __tablename__ = 'charge_orders'

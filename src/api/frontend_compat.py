@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder
+from src.models.models import ChargeOrder, Vehicle
 from datetime import datetime
 
 router = APIRouter()
@@ -172,7 +172,7 @@ async def compat_dump(request: Request):
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
             "queue_duration": dur,
-            "battery_capacity": 100,
+            "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["slow_queue"] = []
     for q in qdata["slow_waiting"]:
@@ -184,8 +184,75 @@ async def compat_dump(request: Request):
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
             "queue_duration": dur,
-            "battery_capacity": 100,
+            "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["fast_queue_count"] = status["fast_waiting_count"]
     status["slow_queue_count"] = status["slow_waiting_count"]
     return status
+
+
+# ------------------------------------------------------------------
+#  车辆管理（无需认证的兼容接口）
+# ------------------------------------------------------------------
+
+class VehicleRegBody(BaseModel):
+    vehicle_id: str
+    battery_capacity_kwh: float = 60.0
+    current_kwh: float = 0.0
+
+
+@router.post("/vehicle/register")
+async def register_vehicle_compat(body: VehicleRegBody):
+    """注册车辆（无需认证），如果已注册则返回现有信息"""
+    if body.current_kwh > body.battery_capacity_kwh:
+        raise HTTPException(
+            status_code=400, detail="当前电量不能超过电池最大容量")
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Vehicle).where(Vehicle.vehicle_id == body.vehicle_id)
+        )
+        existing = result.scalars().first()
+        if existing:
+            return {
+                "status": "exists",
+                "vehicle_id": existing.vehicle_id,
+                "battery_capacity_kwh": existing.battery_capacity_kwh,
+                "current_kwh": existing.current_kwh,
+            }
+
+        vehicle = Vehicle(
+            vehicle_id=body.vehicle_id,
+            battery_capacity_kwh=body.battery_capacity_kwh,
+            current_kwh=body.current_kwh,
+        )
+        session.add(vehicle)
+        await session.commit()
+        await session.refresh(vehicle)
+
+    return {
+        "status": "created",
+        "vehicle_id": vehicle.vehicle_id,
+        "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+        "current_kwh": vehicle.current_kwh,
+    }
+
+
+@router.get("/vehicle/info/{vehicle_id}")
+async def get_vehicle_info_compat(vehicle_id: str):
+    """查询车辆信息（无需认证）"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Vehicle).where(Vehicle.vehicle_id == vehicle_id)
+        )
+        vehicle = result.scalars().first()
+
+    if vehicle is None:
+        return {"status": "not_found", "vehicle_id": vehicle_id}
+
+    return {
+        "status": "found",
+        "vehicle_id": vehicle.vehicle_id,
+        "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+        "current_kwh": vehicle.current_kwh,
+    }

@@ -31,6 +31,30 @@ class UserInfo(BaseModel):
     vehicle_id: Optional[str] = None
 
 
+# ---- 车辆管理 ----
+
+class VehicleCreate(BaseModel):
+    vehicle_id: str = Field(..., description="车牌号")
+    battery_capacity_kwh: float = Field(..., gt=0, description="电池最大容量(kWh)")
+    current_kwh: float = Field(0.0, ge=0, description="当前电池电量(kWh)")
+
+
+class VehicleUpdate(BaseModel):
+    battery_capacity_kwh: Optional[float] = Field(None, gt=0, description="电池最大容量(kWh)")
+    current_kwh: Optional[float] = Field(None, ge=0, description="当前电池电量(kWh)")
+
+
+class VehicleResponse(BaseModel):
+    vehicle_id: str
+    battery_capacity_kwh: float
+    current_kwh: float
+    owner_id: Optional[int] = None
+
+
+class VehicleListResponse(BaseModel):
+    vehicles: List[VehicleResponse]
+
+
 # ---- 充电请求 ----
 
 class ChargeRequest(BaseModel):
