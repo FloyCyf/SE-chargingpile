@@ -34,17 +34,24 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
     
     for idx, q in enumerate(qdata.get("fast_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
-            return {"status": "WAITING", "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "15"}
+            return {"status": "WAITING", "area": "等候区", "area_detail": "快充等候队列第" + str(idx+1) + "位",
+                    "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "15"}
             
     for idx, q in enumerate(qdata.get("slow_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
-            return {"status": "WAITING", "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "30"}
+            return {"status": "WAITING", "area": "等候区", "area_detail": "慢充等候队列第" + str(idx+1) + "位",
+                    "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "30"}
             
     for p in status.get("piles", []):
         for idx, q in enumerate(p.get("queue_items", [])):
             if q["vehicle_id"] == vehicle_id:
                 state = "CHARGING" if idx == 0 and p["status"] == "CHARGING" else "QUEUING"
-                return {"status": state, "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "0"}
+                if state == "CHARGING":
+                    area_detail = "正在 " + p["pile_id"] + " 充电中"
+                else:
+                    area_detail = p["pile_id"] + " 队列第" + str(idx+1) + "位等待"
+                return {"status": state, "area": "充电区", "area_detail": area_detail,
+                        "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "0"}
     
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -52,7 +59,9 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
         )
         order = result.scalars().first()
         if order and order.status in ["COMPLETED", "FAULTED"]:
-            return {"status": order.status, "order_id": order.id, "queue_id": order.pile_id, "queue_position": 0, "estimated_wait_time": "-"}
+            area_detail = "充电完成" if order.status == "COMPLETED" else "因故障中断"
+            return {"status": order.status, "area": "已离开", "area_detail": area_detail,
+                    "order_id": order.id, "queue_id": order.pile_id, "queue_position": 0, "estimated_wait_time": "-"}
             
     raise HTTPException(404, "Vehicle not found")
 

@@ -918,7 +918,9 @@
                             </span>
                         </div>
                         ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
+                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
+                            </div>
                             <div class="mb-2">
                                 <div class="flex justify-between text-xs mb-1">
                                     <span class="text-gray-400">充电进度</span>
@@ -960,7 +962,9 @@
                             </span>
                         </div>
                         ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
+                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
+                            </div>
                             <div class="mb-2">
                                 <div class="flex justify-between text-xs mb-1">
                                     <span class="text-gray-400">充电进度</span>
@@ -997,6 +1001,9 @@
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="badge badge-fast">F${i + 1}</span>
                         </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
+                        </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
                         </div>
@@ -1015,6 +1022,9 @@
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="badge badge-slow">T${i + 1}</span>
+                        </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
                         </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
@@ -1039,6 +1049,9 @@
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="${q.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${q.queue_num}</span>
+                        </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
                         </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电池: ${q.battery_capacity}度 | 请求: ${q.requested_capacity}度 | ${formatDuration(q.queue_duration)}

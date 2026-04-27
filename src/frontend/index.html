@@ -678,6 +678,12 @@
                 const data = response.data;
                 
                 const capacity = document.getElementById('capacity').value;
+                const areaBadgeColor = {
+                    '等候区': 'background:rgba(212,180,131,0.3);color:#ad7e64;border:1px solid rgba(212,180,131,0.5)',
+                    '充电区': 'background:rgba(102,126,234,0.3);color:#667eea;border:1px solid rgba(102,126,234,0.5)',
+                    '已离开': 'background:rgba(136,163,136,0.3);color:#6e896e;border:1px solid rgba(136,163,136,0.5)',
+                };
+                const areaStyle = areaBadgeColor[data.area] || 'background:#eee;color:#666';
                 const statusHtml = `
                     <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
                         <div class="flex justify-between items-center mb-2">
@@ -685,6 +691,12 @@
                             <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
                                 ${chargeMode === 'Fast' ? '快充' : '慢充'}
                             </span>
+                        </div>
+                        <div class="mb-2">
+                            <span style="${areaStyle};padding:3px 10px;border-radius:9999px;font-size:12px;font-weight:600">
+                                ${data.area || '未知'}
+                            </span>
+                            <span class="text-xs text-gray-500 ml-2">${data.area_detail || ''}</span>
                         </div>
                         <div class="text-sm text-gray-600 space-y-1">
                             <p>排队号码: <span class="font-semibold text-gray-800">${data.queue_id || '暂无'}</span></p>
