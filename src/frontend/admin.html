@@ -327,6 +327,9 @@
                     <button onclick="showTab('settings')" id="tab-settings" class="px-4 py-2 text-gray-500 hover:text-gray-800">
                         系统设置
                     </button>
+                    <button onclick="showTab('statuslog')" id="tab-statuslog" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        状态日志
+                    </button>
                 </div>
                 <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -555,6 +558,50 @@
             </div>
         </div>
 
+        <!-- 状态日志面板 -->
+        <div id="statuslog-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">充电桩状态变更日志</h2>
+                <div class="flex items-center gap-3">
+                    <select id="log-pile-filter" onchange="loadStatusLogs()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="">全部充电桩</option>
+                        <option value="F1">F1</option>
+                        <option value="F2">F2</option>
+                        <option value="F3">F3</option>
+                        <option value="T1">T1</option>
+                        <option value="T2">T2</option>
+                    </select>
+                    <button onclick="loadStatusLogs()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                        刷新
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600">
+                            <th class="py-3 px-4 text-left font-semibold">时间</th>
+                            <th class="py-3 px-4 text-left font-semibold">充电桩</th>
+                            <th class="py-3 px-4 text-left font-semibold">状态变更</th>
+                            <th class="py-3 px-4 text-left font-semibold">原因</th>
+                            <th class="py-3 px-4 text-left font-semibold">操作者</th>
+                        </tr>
+                    </thead>
+                    <tbody id="status-log-body">
+                        <tr><td colspan="5" class="text-center py-8 text-gray-400">暂无日志</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center mt-4">
+                <span class="text-sm text-gray-500">共 <span id="log-total">0</span> 条记录</span>
+                <div class="flex gap-2">
+                    <button onclick="logPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                    <span class="px-3 py-1 text-sm text-gray-600">第 <span id="log-page">1</span> 页</span>
+                    <button onclick="logPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 数据图表 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6" id="charts-panel">
             <div class="card bg-white rounded-lg p-6">
@@ -638,34 +685,39 @@
             const monitorTab = document.getElementById('tab-monitor');
             const reportTab = document.getElementById('tab-report');
             const settingsTab = document.getElementById('tab-settings');
+            const statuslogTab = document.getElementById('tab-statuslog');
             const monitorPanel = document.getElementById('monitor-panel');
             const reportPanel = document.getElementById('report-panel');
             const settingsPanel = document.getElementById('settings-panel');
+            const statuslogPanel = document.getElementById('statuslog-panel');
             const chartsPanel = document.getElementById('charts-panel');
 
             monitorTab.classList.remove('tab-active');
             reportTab.classList.remove('tab-active');
             settingsTab.classList.remove('tab-active');
+            statuslogTab.classList.remove('tab-active');
+
+            monitorPanel.style.display = 'none';
+            reportPanel.style.display = 'none';
+            settingsPanel.style.display = 'none';
+            statuslogPanel.style.display = 'none';
+            chartsPanel.style.display = 'none';
 
             if (tab === 'monitor') {
                 monitorTab.classList.add('tab-active');
                 monitorPanel.style.display = 'block';
-                reportPanel.style.display = 'none';
-                settingsPanel.style.display = 'none';
                 chartsPanel.style.display = 'grid';
             } else if (tab === 'report') {
                 reportTab.classList.add('tab-active');
-                monitorPanel.style.display = 'none';
                 reportPanel.style.display = 'block';
-                settingsPanel.style.display = 'none';
-                chartsPanel.style.display = 'none';
                 loadReportData();
+            } else if (tab === 'statuslog') {
+                statuslogTab.classList.add('tab-active');
+                statuslogPanel.style.display = 'block';
+                loadStatusLogs();
             } else {
                 settingsTab.classList.add('tab-active');
-                monitorPanel.style.display = 'none';
-                reportPanel.style.display = 'none';
                 settingsPanel.style.display = 'block';
-                chartsPanel.style.display = 'none';
             }
         }
 
@@ -966,6 +1018,82 @@
 
         function closeHelp() {
             document.getElementById('helpModal').style.display = 'none';
+        }
+
+        // ---- 状态日志相关 ----
+        let logCurrentPage = 1;
+        const logPageSize = 20;
+        let logTotalCount = 0;
+
+        function statusBadge(status) {
+            const map = {
+                'IDLE': 'background:rgba(136,163,136,0.2);color:#6e896e',
+                'CHARGING': 'background:rgba(102,126,234,0.2);color:#667eea',
+                'FAULT': 'background:rgba(200,140,140,0.2);color:#ad7272',
+            };
+            const s = map[status] || 'background:#eee;color:#666';
+            return `<span style="${s};padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:500">${status}</span>`;
+        }
+
+        async function loadStatusLogs() {
+            const pileFilter = document.getElementById('log-pile-filter').value;
+            const offset = (logCurrentPage - 1) * logPageSize;
+            let url = `/api/admin/pile-status-logs?limit=${logPageSize}&offset=${offset}`;
+            if (pileFilter) url += `&pile_id=${pileFilter}`;
+
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    document.getElementById('status-log-body').innerHTML =
+                        '<tr><td colspan="5" class="text-center py-8 text-gray-400">需要管理员权限登录</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                logTotalCount = data.total || 0;
+                document.getElementById('log-total').textContent = logTotalCount;
+                document.getElementById('log-page').textContent = logCurrentPage;
+
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('status-log-body').innerHTML =
+                        '<tr><td colspan="5" class="text-center py-8 text-gray-400">暂无日志记录</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.logs.forEach(log => {
+                    const time = log.changed_at ? formatDateTime(log.changed_at) : '--';
+                    html += `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-gray-600">${time}</td>
+                        <td class="py-3 px-4 font-semibold text-gray-800">${log.pile_id}</td>
+                        <td class="py-3 px-4">${statusBadge(log.old_status)} → ${statusBadge(log.new_status)}</td>
+                        <td class="py-3 px-4 text-gray-600 text-xs">${log.reason || '--'}</td>
+                        <td class="py-3 px-4 text-gray-500">${log.operator}</td>
+                    </tr>`;
+                });
+                document.getElementById('status-log-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading status logs:', e);
+                document.getElementById('status-log-body').innerHTML =
+                    '<tr><td colspan="5" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function logPagePrev() {
+            if (logCurrentPage > 1) {
+                logCurrentPage--;
+                loadStatusLogs();
+            }
+        }
+
+        function logPageNext() {
+            const maxPage = Math.ceil(logTotalCount / logPageSize) || 1;
+            if (logCurrentPage < maxPage) {
+                logCurrentPage++;
+                loadStatusLogs();
+            }
         }
 
         function initCharts() {

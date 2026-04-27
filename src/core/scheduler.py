@@ -8,7 +8,7 @@ from src.api.schemas import ChargeRequest
 from src.core.clock import VirtualClock
 from src.core.billing import calculate_fee
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder, OrderStatus, Vehicle
+from src.models.models import ChargeOrder, OrderStatus, Vehicle, PileStatusLog
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +283,11 @@ class SmartScheduler:
         is_first = len(pile.queue) == 1
 
         if is_first:
+            old_status = pile.status
             pile.status = "CHARGING"
+            await self._log_pile_status(
+                pile.pile_id, old_status, "CHARGING",
+                reason=f"车辆{queue_item['vehicle_id']}开始充电")
 
         # 更新数据库
         async with AsyncSessionLocal() as session:
@@ -421,7 +425,11 @@ class SmartScheduler:
                     await session.commit()
             # pile 保持 CHARGING 状态
         else:
+            old_status = pile.status
             pile.status = "IDLE"
+            await self._log_pile_status(
+                pile.pile_id, old_status, "IDLE",
+                reason=f"车辆{finished_car['vehicle_id']}充电完成，队列为空")
 
         return bill_data
 
@@ -454,10 +462,12 @@ class SmartScheduler:
                 waiting_list.pop(i)
                 pile.queue.append(car)
                 is_first = len(pile.queue) == 1
+                old_status = pile.status
                 if is_first:
                     pile.status = "CHARGING"
                 # 数据库更新在异步方法中完成
-                self._pending_db_updates.append((pile, car, is_first))
+                self._pending_db_updates.append(
+                    (pile, car, is_first, old_status))
 
     async def dispatch_from_waiting_area_async(self):
         """异步版本：调度 + DB 更新"""
@@ -465,7 +475,7 @@ class SmartScheduler:
         self._dispatch_from_waiting_area()
 
         current_vtime = self.clock.get_time()
-        for pile, car, is_first in self._pending_db_updates:
+        for pile, car, is_first, old_status in self._pending_db_updates:
             async with AsyncSessionLocal() as session:
                 order = await session.get(ChargeOrder, car['order_id'])
                 if order:
@@ -477,6 +487,10 @@ class SmartScheduler:
                     else:
                         order.status = OrderStatus.QUEUING
                     await session.commit()
+            if is_first:
+                await self._log_pile_status(
+                    pile.pile_id, old_status, "CHARGING",
+                    reason=f"等候区车辆{car['vehicle_id']}调度充电")
         self._pending_db_updates = []
 
     async def dispatch_watcher(self):
@@ -674,7 +688,11 @@ class SmartScheduler:
             # 收集剩余排队车辆
             displaced_cars = list(pile.queue)
             pile.queue.clear()
+            old_status = pile.status
             pile.status = "FAULT"
+            await self._log_pile_status(
+                pile.pile_id, old_status, "FAULT",
+                reason="管理员设置故障", operator="admin")
 
             # 优先级调度：将故障队列车辆优先分配到同类型其他桩
             if displaced_cars:
@@ -728,6 +746,9 @@ class SmartScheduler:
                 return {"status": "failed", "message": "充电桩不处于故障状态"}
 
             pile.status = "IDLE"
+            await self._log_pile_status(
+                pile.pile_id, "FAULT", "IDLE",
+                reason="管理员恢复故障", operator="admin")
             current_vtime = self.clock.get_time()
 
             # 如果同类型桩仍有排队车辆，进行时间顺序重新调度
@@ -806,13 +827,21 @@ class SmartScheduler:
             if pile.status == "FAULT":
                 return await self._recover_pile_internal(pile)
             if pile.status != "IDLE" and len(pile.queue) == 0:
+                old_status = pile.status
                 pile.status = "IDLE"
+                await self._log_pile_status(
+                    pile.pile_id, old_status, "IDLE",
+                    reason="管理员启动桩", operator="admin")
             return {"status": "success",
                     "message": f"充电桩 {pile_id} 已启动",
                     "pile_id": pile_id}
 
     async def _recover_pile_internal(self, pile: ChargingPile) -> dict:
+        old_status = pile.status
         pile.status = "IDLE"
+        await self._log_pile_status(
+            pile.pile_id, old_status, "IDLE",
+            reason="管理员启动恢复故障桩", operator="admin")
         current_vtime = self.clock.get_time()
         same_type_piles = [
             p for p in self.piles
@@ -943,3 +972,21 @@ class SmartScheduler:
             if order:
                 order.status = status
                 await session.commit()
+
+    async def _log_pile_status(self, pile_id: str, old_status: str,
+                               new_status: str, reason: str = "",
+                               operator: str = "system"):
+        """记录充电桩状态变更到数据库日志表"""
+        if old_status == new_status:
+            return
+        async with AsyncSessionLocal() as session:
+            log = PileStatusLog(
+                pile_id=pile_id,
+                old_status=old_status,
+                new_status=new_status,
+                reason=reason,
+                operator=operator,
+                changed_at=self.clock.get_time(),
+            )
+            session.add(log)
+            await session.commit()

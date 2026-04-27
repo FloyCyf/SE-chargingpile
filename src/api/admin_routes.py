@@ -6,9 +6,10 @@ from src.api.schemas import (
     PileControlRequest, PileControlResponse,
     SystemStatusResponse, WaitingAreaResponse,
     ReportResponse, ReportItem,
+    PileStatusLogItem, PileStatusLogResponse,
 )
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder, OrderStatus
+from src.models.models import ChargeOrder, OrderStatus, PileStatusLog
 
 router = APIRouter()
 
@@ -156,4 +157,47 @@ async def get_reports(
         start_date=start_dt.strftime("%Y-%m-%d"),
         end_date=end_dt.strftime("%Y-%m-%d"),
         items=items,
+    )
+
+
+@router.get("/pile-status-logs", response_model=PileStatusLogResponse)
+async def get_pile_status_logs(
+    request: Request,
+    pile_id: str = Query(None, description="充电桩编号，为空则查询全部"),
+    limit: int = Query(50, ge=1, le=500, description="返回条数"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    admin: dict = Depends(require_admin),
+):
+    """查询充电桩状态变更历史"""
+    async with AsyncSessionLocal() as session:
+        stmt = select(PileStatusLog).order_by(
+            PileStatusLog.changed_at.desc())
+
+        if pile_id:
+            stmt = stmt.where(PileStatusLog.pile_id == pile_id)
+
+        # 查总数
+        count_stmt = select(func.count()).select_from(PileStatusLog)
+        if pile_id:
+            count_stmt = count_stmt.where(PileStatusLog.pile_id == pile_id)
+        total_result = await session.execute(count_stmt)
+        total = total_result.scalar() or 0
+
+        stmt = stmt.offset(offset).limit(limit)
+        result = await session.execute(stmt)
+        logs = result.scalars().all()
+
+    return PileStatusLogResponse(
+        logs=[
+            PileStatusLogItem(
+                id=log.id,
+                pile_id=log.pile_id,
+                old_status=log.old_status,
+                new_status=log.new_status,
+                reason=log.reason,
+                operator=log.operator or "system",
+                changed_at=log.changed_at,
+            ) for log in logs
+        ],
+        total=total,
     )

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -103,3 +103,18 @@ class PileQueue(Base):
 
     pile = relationship("ChargingPile", backref="queue_items")
     order = relationship("ChargeOrder", backref="pile_queue")
+
+
+class PileStatusLog(Base):
+    """充电桩状态变更日志表"""
+    __tablename__ = 'pile_status_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pile_id = Column(String(50), nullable=False, comment="充电桩编号")
+    old_status = Column(String(20), nullable=False, comment="变更前状态")
+    new_status = Column(String(20), nullable=False, comment="变更后状态")
+    reason = Column(String(200), nullable=True,
+                    comment="变更原因(调度/故障/手动操作/充电完成等)")
+    operator = Column(String(50), default="system",
+                      comment="操作者(system/管理员用户名)")
+    changed_at = Column(DateTime, default=func.now(), comment="变更时间")

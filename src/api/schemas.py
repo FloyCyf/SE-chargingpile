@@ -250,3 +250,20 @@ class OrderSummary(BaseModel):
 
 class OrderListResponse(BaseModel):
     orders: List[OrderSummary]
+
+
+# ---- 充电桩状态日志 ----
+
+class PileStatusLogItem(BaseModel):
+    id: int
+    pile_id: str
+    old_status: str
+    new_status: str
+    reason: Optional[str] = None
+    operator: str = "system"
+    changed_at: Optional[datetime] = None
+
+
+class PileStatusLogResponse(BaseModel):
+    logs: List[PileStatusLogItem]
+    total: int = 0
