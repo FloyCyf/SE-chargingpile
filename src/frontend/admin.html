@@ -535,23 +535,35 @@
                     <h3 class="text-base font-semibold mb-3 text-gray-800">计费设置</h3>
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">峰时电价 (10:00-15:00, 18:00-21:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">峰时电价 (元/kWh)</label>
                             <input type="number" id="peak-price" step="0.1" min="0" value="1.0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">平时电价 (7:00-10:00, 15:00-18:00, 21:00-23:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">峰时时段 (如 10-15,18-21)</label>
+                            <input type="text" id="peak-hours" value="10-15,18-21" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 10-15,18-21">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">平时电价 (元/kWh)</label>
                             <input type="number" id="normal-price" step="0.1" min="0" value="0.7" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">谷时电价 (23:00-次日7:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">平时时段 (如 7-10,15-18,21-23)</label>
+                            <input type="text" id="flat-hours" value="7-10,15-18,21-23" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 7-10,15-18,21-23">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">谷时电价 (元/kWh)</label>
                             <input type="number" id="valley-price" step="0.1" min="0" value="0.4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">服务费单价</label>
+                            <label class="block text-sm text-gray-500 mb-2">谷时时段 (如 23-24,0-7)</label>
+                            <input type="text" id="valley-hours" value="23-24,0-7" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 23-24,0-7">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">服务费单价 (元/kWh)</label>
                             <input type="number" id="service-fee" step="0.1" min="0" value="0.8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <button onclick="savePriceSettings()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
-                            保存设置
+                            保存计费设置
                         </button>
                     </div>
                 </div>
@@ -718,6 +730,7 @@
             } else {
                 settingsTab.classList.add('tab-active');
                 settingsPanel.style.display = 'block';
+                loadBillingConfig();
             }
         }
 
@@ -1008,8 +1021,70 @@
             showNotification('充电桩设置已保存', 'success');
         }
 
-        function savePriceSettings() {
-            showNotification('计费设置已保存', 'success');
+        // ---- 计费配置 ----
+
+        function hoursArrayToStr(arr) {
+            return arr.map(pair => pair[0] + '-' + pair[1]).join(',');
+        }
+
+        function strToHoursArray(str) {
+            if (!str || !str.trim()) return [];
+            return str.split(',').map(s => {
+                const parts = s.trim().split('-');
+                return [parseInt(parts[0]), parseInt(parts[1])];
+            });
+        }
+
+        async function loadBillingConfig() {
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/billing-config', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const cfg = await res.json();
+                document.getElementById('peak-price').value = cfg.peak_rate;
+                document.getElementById('normal-price').value = cfg.flat_rate;
+                document.getElementById('valley-price').value = cfg.valley_rate;
+                document.getElementById('service-fee').value = cfg.service_fee_rate;
+                document.getElementById('peak-hours').value = hoursArrayToStr(cfg.peak_hours || []);
+                document.getElementById('flat-hours').value = hoursArrayToStr(cfg.flat_hours || []);
+                document.getElementById('valley-hours').value = hoursArrayToStr(cfg.valley_hours || []);
+            } catch (e) {
+                console.error('Error loading billing config:', e);
+            }
+        }
+
+        async function savePriceSettings() {
+            const body = {
+                peak_rate: parseFloat(document.getElementById('peak-price').value),
+                flat_rate: parseFloat(document.getElementById('normal-price').value),
+                valley_rate: parseFloat(document.getElementById('valley-price').value),
+                service_fee_rate: parseFloat(document.getElementById('service-fee').value),
+                peak_hours: strToHoursArray(document.getElementById('peak-hours').value),
+                flat_hours: strToHoursArray(document.getElementById('flat-hours').value),
+                valley_hours: strToHoursArray(document.getElementById('valley-hours').value),
+            };
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/billing-config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token,
+                    },
+                    body: JSON.stringify(body),
+                });
+                if (res.ok) {
+                    showNotification('计费设置已保存并生效', 'success');
+                } else {
+                    const data = await res.json();
+                    showNotification('保存失败: ' + (data.detail || '未知错误'), 'error');
+                }
+            } catch (e) {
+                console.error('Error saving billing config:', e);
+                showNotification('保存失败: 网络错误', 'error');
+            }
         }
 
         function showHelp() {

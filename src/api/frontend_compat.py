@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from src.models.database import AsyncSessionLocal
 from src.models.models import ChargeOrder, Vehicle
+from src.core.billing import calculate_fee
 from datetime import datetime
 
 router = APIRouter()
@@ -118,19 +119,26 @@ async def get_orders(vehicle_id: str):
         orders = result.scalars().all()
     out = []
     for o in orders:
-        out.append({
+        item = {
             "order_id": o.id,
-            "bill_code": o.bill_code or f"Order-{o.id}", 
+            "bill_code": o.bill_code or f"Order-{o.id}",
             "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
-            "pile_id": o.pile_id or "--", 
+            "pile_id": o.pile_id or "--",
             "electricity": o.total_power or 0,
-            "duration": o.charge_duration or 0, 
+            "duration": o.charge_duration or 0,
             "start_time": o.charge_start_time.isoformat() if getattr(o, "charge_start_time", None) else "--",
             "end_time": o.charge_end_time.isoformat() if getattr(o, "charge_end_time", None) else "--",
             "power_fee": o.power_fee or 0,
             "service_fee": o.service_fee or 0,
-            "total_fee": o.total_fee or 0
-        })
+            "total_fee": o.total_fee or 0,
+            "detail": None,
+        }
+        if (o.charge_start_time and o.charge_end_time
+                and o.total_power and o.total_power > 0):
+            fee_result = calculate_fee(
+                o.charge_start_time, o.charge_end_time, o.total_power)
+            item["detail"] = fee_result.get("detail")
+        out.append(item)
     return out
 
 @router.get("/order/{order_id}")

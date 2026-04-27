@@ -135,10 +135,28 @@ class QueuePositionResponse(BaseModel):
 
 # ---- 计费与账单 ----
 
+class FeeSegment(BaseModel):
+    """单个连续时段段"""
+    period: str = ""
+    start: str = ""
+    end: str = ""
+    minutes: int = 0
+    kwh: float = 0.0
+    rate: float = 0.0
+    fee: float = 0.0
+
+
 class FeeDetail(BaseModel):
     peak_minutes: int = 0
     flat_minutes: int = 0
     valley_minutes: int = 0
+    peak_kwh: float = 0.0
+    peak_fee: float = 0.0
+    flat_kwh: float = 0.0
+    flat_fee: float = 0.0
+    valley_kwh: float = 0.0
+    valley_fee: float = 0.0
+    segments: List[FeeSegment] = []
 
 
 class BillResponse(BaseModel):

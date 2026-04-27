@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from pydantic import BaseModel
+from typing import List, Optional
 from sqlalchemy import select, func, and_
 from src.api.auth import require_admin
 from src.api.schemas import (
@@ -10,6 +12,7 @@ from src.api.schemas import (
 )
 from src.models.database import AsyncSessionLocal
 from src.models.models import ChargeOrder, OrderStatus, PileStatusLog
+from src.core.billing import get_billing_config, update_billing_config
 
 router = APIRouter()
 
@@ -201,3 +204,36 @@ async def get_pile_status_logs(
         ],
         total=total,
     )
+
+
+# ---- 计费配置 ----
+
+class BillingConfigUpdate(BaseModel):
+    peak_rate: Optional[float] = None
+    flat_rate: Optional[float] = None
+    valley_rate: Optional[float] = None
+    service_fee_rate: Optional[float] = None
+    peak_hours: Optional[List[List[int]]] = None
+    flat_hours: Optional[List[List[int]]] = None
+    valley_hours: Optional[List[List[int]]] = None
+
+
+@router.get("/billing-config")
+async def get_billing_config_api(
+    admin: dict = Depends(require_admin),
+):
+    """获取当前计费配置"""
+    return get_billing_config()
+
+
+@router.put("/billing-config")
+async def update_billing_config_api(
+    body: BillingConfigUpdate,
+    admin: dict = Depends(require_admin),
+):
+    """动态更新计费配置（费率/时段）"""
+    new_config = body.model_dump(exclude_none=True)
+    if not new_config:
+        raise HTTPException(status_code=400, detail="未提供任何更新字段")
+    update_billing_config(new_config)
+    return {"status": "success", "message": "计费配置已更新", "config": get_billing_config()}
