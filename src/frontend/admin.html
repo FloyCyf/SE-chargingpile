@@ -324,6 +324,9 @@
                     <button onclick="showTab('report')" id="tab-report" class="px-4 py-2 text-gray-500 hover:text-gray-800">
                         数据报表
                     </button>
+                    <button onclick="showTab('ordermgr')" id="tab-ordermgr" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        订单管理
+                    </button>
                     <button onclick="showTab('settings')" id="tab-settings" class="px-4 py-2 text-gray-500 hover:text-gray-800">
                         系统设置
                     </button>
@@ -614,6 +617,107 @@
             </div>
         </div>
 
+        <!-- 订单管理面板 -->
+        <div id="ordermgr-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">订单 / 账单 / 详单管理</h2>
+
+            <!-- 子 Tab -->
+            <div class="flex border-b border-gray-200 mb-4">
+                <button onclick="showOrderSubTab('orders')" id="sub-tab-orders" class="px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">
+                    订单列表
+                </button>
+                <button onclick="showOrderSubTab('bills')" id="sub-tab-bills" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                    账单列表
+                </button>
+                <button onclick="showOrderSubTab('details')" id="sub-tab-details" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                    详单列表
+                </button>
+            </div>
+
+            <!-- 导出按钮行 -->
+            <div class="flex gap-3 mb-4">
+                <button onclick="exportCSV('orders')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出订单 CSV
+                </button>
+                <button onclick="exportCSV('bills')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出账单 CSV
+                </button>
+                <button onclick="exportCSV('bill-details')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出详单 CSV
+                </button>
+            </div>
+
+            <!-- 订单子面板 -->
+            <div id="sub-orders-panel">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600">
+                                <th class="py-2 px-3 text-left font-semibold">ID</th>
+                                <th class="py-2 px-3 text-left font-semibold">车牌号</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电桩</th>
+                                <th class="py-2 px-3 text-left font-semibold">模式</th>
+                                <th class="py-2 px-3 text-left font-semibold">请求(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">实际(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">状态</th>
+                                <th class="py-2 px-3 text-left font-semibold">总费用</th>
+                                <th class="py-2 px-3 text-left font-semibold">创建时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-orders-body">
+                            <tr><td colspan="9" class="text-center py-8 text-gray-400">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-between items-center mt-3">
+                    <span class="text-sm text-gray-500">共 <span id="admin-orders-total">0</span> 条</span>
+                    <div class="flex gap-2">
+                        <button onclick="orderPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                        <span class="px-3 py-1 text-sm text-gray-600">第 <span id="admin-orders-page">1</span> 页</span>
+                        <button onclick="orderPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 账单子面板 -->
+            <div id="sub-bills-panel" style="display:none;">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600">
+                                <th class="py-2 px-3 text-left font-semibold">账单编号</th>
+                                <th class="py-2 px-3 text-left font-semibold">车牌号</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电桩</th>
+                                <th class="py-2 px-3 text-left font-semibold">电量(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电费</th>
+                                <th class="py-2 px-3 text-left font-semibold">服务费</th>
+                                <th class="py-2 px-3 text-left font-semibold">总费用</th>
+                                <th class="py-2 px-3 text-left font-semibold">时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-bills-body">
+                            <tr><td colspan="8" class="text-center py-8 text-gray-400">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-between items-center mt-3">
+                    <span class="text-sm text-gray-500">共 <span id="admin-bills-total">0</span> 条</span>
+                    <div class="flex gap-2">
+                        <button onclick="billPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                        <span class="px-3 py-1 text-sm text-gray-600">第 <span id="admin-bills-page">1</span> 页</span>
+                        <button onclick="billPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 详单子面板 -->
+            <div id="sub-details-panel" style="display:none;">
+                <div id="admin-details-content" class="space-y-3">
+                    <div class="text-center py-8 text-gray-400">请先在"账单列表"中点击某条账单查看详单</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 数据图表 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6" id="charts-panel">
             <div class="card bg-white rounded-lg p-6">
@@ -698,21 +802,25 @@
             const reportTab = document.getElementById('tab-report');
             const settingsTab = document.getElementById('tab-settings');
             const statuslogTab = document.getElementById('tab-statuslog');
+            const ordermgrTab = document.getElementById('tab-ordermgr');
             const monitorPanel = document.getElementById('monitor-panel');
             const reportPanel = document.getElementById('report-panel');
             const settingsPanel = document.getElementById('settings-panel');
             const statuslogPanel = document.getElementById('statuslog-panel');
+            const ordermgrPanel = document.getElementById('ordermgr-panel');
             const chartsPanel = document.getElementById('charts-panel');
 
             monitorTab.classList.remove('tab-active');
             reportTab.classList.remove('tab-active');
             settingsTab.classList.remove('tab-active');
             statuslogTab.classList.remove('tab-active');
+            ordermgrTab.classList.remove('tab-active');
 
             monitorPanel.style.display = 'none';
             reportPanel.style.display = 'none';
             settingsPanel.style.display = 'none';
             statuslogPanel.style.display = 'none';
+            ordermgrPanel.style.display = 'none';
             chartsPanel.style.display = 'none';
 
             if (tab === 'monitor') {
@@ -727,6 +835,10 @@
                 statuslogTab.classList.add('tab-active');
                 statuslogPanel.style.display = 'block';
                 loadStatusLogs();
+            } else if (tab === 'ordermgr') {
+                ordermgrTab.classList.add('tab-active');
+                ordermgrPanel.style.display = 'block';
+                loadAdminOrders();
             } else {
                 settingsTab.classList.add('tab-active');
                 settingsPanel.style.display = 'block';
@@ -1227,6 +1339,202 @@
                     }
                 }
             });
+        }
+
+        // ---- 订单管理相关 ----
+        let orderCurrentPage = 1;
+        let billCurrentPage = 1;
+        const mgrPageSize = 20;
+        let orderTotalCount = 0;
+        let billTotalCount = 0;
+
+        function showOrderSubTab(sub) {
+            document.getElementById('sub-tab-orders').classList.remove('tab-active');
+            document.getElementById('sub-tab-bills').classList.remove('tab-active');
+            document.getElementById('sub-tab-details').classList.remove('tab-active');
+            document.getElementById('sub-orders-panel').style.display = 'none';
+            document.getElementById('sub-bills-panel').style.display = 'none';
+            document.getElementById('sub-details-panel').style.display = 'none';
+
+            if (sub === 'orders') {
+                document.getElementById('sub-tab-orders').classList.add('tab-active');
+                document.getElementById('sub-orders-panel').style.display = 'block';
+                loadAdminOrders();
+            } else if (sub === 'bills') {
+                document.getElementById('sub-tab-bills').classList.add('tab-active');
+                document.getElementById('sub-bills-panel').style.display = 'block';
+                loadAdminBills();
+            } else {
+                document.getElementById('sub-tab-details').classList.add('tab-active');
+                document.getElementById('sub-details-panel').style.display = 'block';
+            }
+        }
+
+        function orderStatusBadge(status) {
+            const map = {
+                'WAITING': 'background:rgba(212,180,131,0.2);color:#d4b483',
+                'QUEUING': 'background:rgba(125,148,166,0.2);color:#7d94a6',
+                'CHARGING': 'background:rgba(102,126,234,0.2);color:#667eea',
+                'COMPLETED': 'background:rgba(136,163,136,0.2);color:#6e896e',
+                'CANCELLED': 'background:rgba(143,138,126,0.2);color:#8f8a7e',
+                'FAULTED': 'background:rgba(200,140,140,0.2);color:#ad7272',
+            };
+            const s = map[status] || 'background:#eee;color:#666';
+            return '<span style="' + s + ';padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:500">' + status + '</span>';
+        }
+
+        async function loadAdminOrders() {
+            const offset = (orderCurrentPage - 1) * mgrPageSize;
+            const token = localStorage.getItem('admin_token') || '';
+            try {
+                const res = await fetch('/api/admin/orders?limit=' + mgrPageSize + '&offset=' + offset, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) {
+                    document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-400">需要管理员权限</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                orderTotalCount = data.total || 0;
+                document.getElementById('admin-orders-total').textContent = orderTotalCount;
+                document.getElementById('admin-orders-page').textContent = orderCurrentPage;
+
+                if (!data.orders || data.orders.length === 0) {
+                    document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-400">暂无订单</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.orders.forEach(o => {
+                    html += '<tr class="border-b border-gray-100 hover:bg-gray-50">';
+                    html += '<td class="py-2 px-3 text-gray-800 font-medium">' + o.order_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + o.vehicle_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.pile_id || '--') + '</td>';
+                    html += '<td class="py-2 px-3">' + (o.charge_type === 'Fast' ? '<span class="badge badge-fast">快充</span>' : '<span class="badge badge-slow">慢充</span>') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.requested_kwh || 0).toFixed(1) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.charged_kwh || 0).toFixed(1) + '</td>';
+                    html += '<td class="py-2 px-3">' + orderStatusBadge(o.status) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">' + (o.total_fee != null ? '¥' + o.total_fee.toFixed(2) : '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-500 text-xs">' + (o.created_at ? formatDateTime(o.created_at) : '--') + '</td>';
+                    html += '</tr>';
+                });
+                document.getElementById('admin-orders-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading admin orders:', e);
+                document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function orderPagePrev() {
+            if (orderCurrentPage > 1) { orderCurrentPage--; loadAdminOrders(); }
+        }
+        function orderPageNext() {
+            const maxPage = Math.ceil(orderTotalCount / mgrPageSize) || 1;
+            if (orderCurrentPage < maxPage) { orderCurrentPage++; loadAdminOrders(); }
+        }
+
+        async function loadAdminBills() {
+            const offset = (billCurrentPage - 1) * mgrPageSize;
+            const token = localStorage.getItem('admin_token') || '';
+            try {
+                const res = await fetch('/api/admin/bills?limit=' + mgrPageSize + '&offset=' + offset, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) {
+                    document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400">需要管理员权限</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                billTotalCount = data.total || 0;
+                document.getElementById('admin-bills-total').textContent = billTotalCount;
+                document.getElementById('admin-bills-page').textContent = billCurrentPage;
+
+                if (!data.bills || data.bills.length === 0) {
+                    document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400">暂无账单</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.bills.forEach(b => {
+                    html += '<tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="showBillDetails(' + JSON.stringify(b.details).replace(/"/g, '&quot;') + ', \'' + b.bill_code + '\')">';
+                    html += '<td class="py-2 px-3 text-blue-600 font-medium underline">' + b.bill_code + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + b.vehicle_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (b.pile_id || '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (b.total_power != null ? b.total_power.toFixed(2) : '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (b.power_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (b.service_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">¥' + (b.total_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-500 text-xs">' + (b.created_at ? formatDateTime(b.created_at) : '--') + '</td>';
+                    html += '</tr>';
+                });
+                document.getElementById('admin-bills-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading admin bills:', e);
+                document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function billPagePrev() {
+            if (billCurrentPage > 1) { billCurrentPage--; loadAdminBills(); }
+        }
+        function billPageNext() {
+            const maxPage = Math.ceil(billTotalCount / mgrPageSize) || 1;
+            if (billCurrentPage < maxPage) { billCurrentPage++; loadAdminBills(); }
+        }
+
+        function showBillDetails(details, billCode) {
+            showOrderSubTab('details');
+            const periodNames = {peak: '峰时', flat: '平时', valley: '谷时'};
+            const periodColors = {peak: '#c88c8c', flat: '#d4b483', valley: '#88a388'};
+            let html = '<h3 class="text-base font-semibold text-gray-800 mb-3">账单 ' + billCode + ' 的时段详单</h3>';
+            if (!details || details.length === 0) {
+                html += '<div class="text-center py-8 text-gray-400">该账单无详单记录</div>';
+            } else {
+                html += '<table class="w-full text-sm"><thead><tr class="bg-gray-50 text-gray-600">';
+                html += '<th class="py-2 px-3 text-left font-semibold">时段</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">时间</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">分钟</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">电量(kWh)</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">电价</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">费用</th>';
+                html += '</tr></thead><tbody>';
+                details.forEach(d => {
+                    const pName = periodNames[d.period] || d.period;
+                    const pColor = periodColors[d.period] || '#666';
+                    html += '<tr class="border-b border-gray-100">';
+                    html += '<td class="py-2 px-3" style="color:' + pColor + ';font-weight:600">' + pName + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.start_time || '') + ' - ' + (d.end_time || '') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.duration_minutes || 0) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.kwh || 0).toFixed(4) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (d.rate || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">¥' + (d.fee || 0).toFixed(2) + '</td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+            document.getElementById('admin-details-content').innerHTML = html;
+        }
+
+        function exportCSV(type) {
+            const token = localStorage.getItem('admin_token') || '';
+            const url = '/api/admin/export/' + type;
+            fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+                .then(res => {
+                    if (!res.ok) throw new Error('Export failed');
+                    return res.blob();
+                })
+                .then(blob => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = type + '.csv';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                    showNotification(type + ' CSV 已导出', 'success');
+                })
+                .catch(e => {
+                    console.error('Export error:', e);
+                    showNotification('导出失败，请确认管理员登录', 'error');
+                });
         }
 
         window.onload = function() {

@@ -8,7 +8,7 @@ from src.api.schemas import ChargeRequest
 from src.core.clock import VirtualClock
 from src.core.billing import calculate_fee
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder, OrderStatus, Vehicle, PileStatusLog
+from src.models.models import ChargeOrder, OrderStatus, Vehicle, PileStatusLog, Bill, BillDetail
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +387,41 @@ class SmartScheduler:
                 order.power_fee = fee_result["power_fee"]
                 order.service_fee = fee_result["service_fee"]
                 order.total_fee = fee_result["total_fee"]
+
+                # 生成账单记录
+                bill = Bill(
+                    bill_code=order.bill_code,
+                    order_id=order.id,
+                    vehicle_id=order.vehicle_id,
+                    pile_id=pile.pile_id,
+                    charge_type=order.charge_type,
+                    charge_start_time=charge_start,
+                    charge_end_time=current_vtime,
+                    charge_duration=fee_result["duration_hours"],
+                    total_power=fee_result["total_power"],
+                    power_fee=fee_result["power_fee"],
+                    service_fee=fee_result["service_fee"],
+                    total_fee=fee_result["total_fee"],
+                    created_at=current_vtime,
+                )
+                session.add(bill)
+                await session.flush()  # 获取 bill.id
+
+                # 生成详单记录（每个连续时段段一条）
+                detail = fee_result.get("detail", {})
+                for seg in detail.get("segments", []):
+                    bd = BillDetail(
+                        bill_id=bill.id,
+                        period=seg.get("period", ""),
+                        start_time=seg.get("start", ""),
+                        end_time=seg.get("end", ""),
+                        duration_minutes=seg.get("minutes", 0),
+                        kwh=seg.get("kwh", 0.0),
+                        rate=seg.get("rate", 0.0),
+                        fee=seg.get("fee", 0.0),
+                    )
+                    session.add(bd)
+
                 await session.commit()
                 bill_data = fee_result
 

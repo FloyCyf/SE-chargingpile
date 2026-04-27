@@ -285,3 +285,62 @@ class PileStatusLogItem(BaseModel):
 class PileStatusLogResponse(BaseModel):
     logs: List[PileStatusLogItem]
     total: int = 0
+
+
+# ---- 账单与详单（管理员查询） ----
+
+class BillDetailItem(BaseModel):
+    """详单条目：某个连续时段的费用明细"""
+    id: int
+    period: str = ""
+    start_time: str = ""
+    end_time: str = ""
+    duration_minutes: int = 0
+    kwh: float = 0.0
+    rate: float = 0.0
+    fee: float = 0.0
+
+
+class BillItem(BaseModel):
+    """账单条目"""
+    id: int
+    bill_code: str
+    order_id: int
+    vehicle_id: str
+    pile_id: Optional[str] = None
+    charge_type: str
+    charge_start_time: Optional[datetime] = None
+    charge_end_time: Optional[datetime] = None
+    charge_duration: Optional[float] = None
+    total_power: Optional[float] = None
+    power_fee: Optional[float] = None
+    service_fee: Optional[float] = None
+    total_fee: Optional[float] = None
+    created_at: Optional[datetime] = None
+    details: List[BillDetailItem] = []
+
+
+class BillListResponse(BaseModel):
+    bills: List[BillItem]
+    total: int = 0
+
+
+class AdminOrderItem(BaseModel):
+    """管理员订单列表条目"""
+    order_id: int
+    vehicle_id: str
+    charge_type: str
+    requested_kwh: float
+    charged_kwh: float = 0.0
+    queue_number: Optional[str] = None
+    status: str
+    pile_id: Optional[str] = None
+    total_fee: Optional[float] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class AdminOrderListResponse(BaseModel):
+    orders: List[AdminOrderItem]
+    total: int = 0

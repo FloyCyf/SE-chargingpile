@@ -1,17 +1,23 @@
 from datetime import datetime, timedelta
+import csv
+import io
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from src.api.auth import require_admin
 from src.api.schemas import (
     PileControlRequest, PileControlResponse,
     SystemStatusResponse, WaitingAreaResponse,
     ReportResponse, ReportItem,
     PileStatusLogItem, PileStatusLogResponse,
+    BillItem, BillDetailItem, BillListResponse,
+    AdminOrderItem, AdminOrderListResponse,
 )
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder, OrderStatus, PileStatusLog
+from src.models.models import ChargeOrder, OrderStatus, PileStatusLog, Bill, BillDetail
 from src.core.billing import get_billing_config, update_billing_config
 
 router = APIRouter()
@@ -237,3 +243,224 @@ async def update_billing_config_api(
         raise HTTPException(status_code=400, detail="未提供任何更新字段")
     update_billing_config(new_config)
     return {"status": "success", "message": "计费配置已更新", "config": get_billing_config()}
+
+
+# ---- 订单列表 ----
+
+@router.get("/orders", response_model=AdminOrderListResponse)
+async def admin_list_orders(
+    status: str = Query(None, description="筛选状态"),
+    vehicle_id: str = Query(None, description="筛选车牌号"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    admin: dict = Depends(require_admin),
+):
+    """管理员查询所有订单"""
+    async with AsyncSessionLocal() as session:
+        stmt = select(ChargeOrder).order_by(ChargeOrder.id.desc())
+        count_stmt = select(func.count()).select_from(ChargeOrder)
+
+        if status:
+            stmt = stmt.where(ChargeOrder.status == status)
+            count_stmt = count_stmt.where(ChargeOrder.status == status)
+        if vehicle_id:
+            stmt = stmt.where(ChargeOrder.vehicle_id == vehicle_id)
+            count_stmt = count_stmt.where(ChargeOrder.vehicle_id == vehicle_id)
+
+        total = (await session.execute(count_stmt)).scalar() or 0
+        result = await session.execute(stmt.offset(offset).limit(limit))
+        orders = result.scalars().all()
+
+    return AdminOrderListResponse(
+        orders=[
+            AdminOrderItem(
+                order_id=o.id,
+                vehicle_id=o.vehicle_id,
+                charge_type=o.charge_type,
+                requested_kwh=o.requested_kwh or 0.0,
+                charged_kwh=o.charged_kwh or 0.0,
+                queue_number=o.queue_number,
+                status=o.status,
+                pile_id=o.pile_id,
+                total_fee=o.total_fee,
+                created_at=o.created_at,
+                started_at=o.started_at,
+                finished_at=o.finished_at,
+            ) for o in orders
+        ],
+        total=total,
+    )
+
+
+# ---- 账单列表（含详单） ----
+
+@router.get("/bills", response_model=BillListResponse)
+async def admin_list_bills(
+    vehicle_id: str = Query(None, description="筛选车牌号"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    admin: dict = Depends(require_admin),
+):
+    """管理员查询所有账单（含详单明细）"""
+    async with AsyncSessionLocal() as session:
+        stmt = (select(Bill)
+                .options(selectinload(Bill.details))
+                .order_by(Bill.id.desc()))
+        count_stmt = select(func.count()).select_from(Bill)
+
+        if vehicle_id:
+            stmt = stmt.where(Bill.vehicle_id == vehicle_id)
+            count_stmt = count_stmt.where(Bill.vehicle_id == vehicle_id)
+
+        total = (await session.execute(count_stmt)).scalar() or 0
+        result = await session.execute(stmt.offset(offset).limit(limit))
+        bills = result.scalars().unique().all()
+
+    return BillListResponse(
+        bills=[
+            BillItem(
+                id=b.id,
+                bill_code=b.bill_code,
+                order_id=b.order_id,
+                vehicle_id=b.vehicle_id,
+                pile_id=b.pile_id,
+                charge_type=b.charge_type,
+                charge_start_time=b.charge_start_time,
+                charge_end_time=b.charge_end_time,
+                charge_duration=b.charge_duration,
+                total_power=b.total_power,
+                power_fee=b.power_fee,
+                service_fee=b.service_fee,
+                total_fee=b.total_fee,
+                created_at=b.created_at,
+                details=[
+                    BillDetailItem(
+                        id=d.id,
+                        period=d.period,
+                        start_time=d.start_time or "",
+                        end_time=d.end_time or "",
+                        duration_minutes=d.duration_minutes or 0,
+                        kwh=d.kwh or 0.0,
+                        rate=d.rate or 0.0,
+                        fee=d.fee or 0.0,
+                    ) for d in (b.details or [])
+                ],
+            ) for b in bills
+        ],
+        total=total,
+    )
+
+
+# ---- CSV 导出 ----
+
+@router.get("/export/orders")
+async def export_orders_csv(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有订单为 CSV 文件"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(ChargeOrder).order_by(ChargeOrder.id.desc()))
+        orders = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "订单ID", "车牌号", "充电桩", "充电模式", "请求电量(kWh)",
+        "实际电量(kWh)", "排队号", "状态", "充电费(元)", "服务费(元)",
+        "总费用(元)", "创建时间", "开始充电", "完成时间",
+    ])
+    for o in orders:
+        writer.writerow([
+            o.id, o.vehicle_id, o.pile_id or "", o.charge_type,
+            o.requested_kwh or 0, o.charged_kwh or 0,
+            o.queue_number or "", o.status,
+            o.power_fee or 0, o.service_fee or 0, o.total_fee or 0,
+            o.created_at.strftime("%Y-%m-%d %H:%M:%S") if o.created_at else "",
+            o.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if o.charge_start_time else "",
+            o.finished_at.strftime("%Y-%m-%d %H:%M:%S") if o.finished_at else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter(["\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=orders.csv"},
+    )
+
+
+@router.get("/export/bills")
+async def export_bills_csv(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有账单为 CSV 文件"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Bill)
+            .options(selectinload(Bill.details))
+            .order_by(Bill.id.desc()))
+        bills = result.scalars().unique().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "账单编号", "订单ID", "车牌号", "充电桩", "充电模式",
+        "充电时长(h)", "充电电量(kWh)", "充电费(元)", "服务费(元)",
+        "总费用(元)", "开始时间", "结束时间", "账单生成时间",
+    ])
+    for b in bills:
+        writer.writerow([
+            b.bill_code, b.order_id, b.vehicle_id, b.pile_id or "",
+            b.charge_type, round(b.charge_duration or 0, 4),
+            round(b.total_power or 0, 4),
+            round(b.power_fee or 0, 2), round(b.service_fee or 0, 2),
+            round(b.total_fee or 0, 2),
+            b.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_start_time else "",
+            b.charge_end_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_end_time else "",
+            b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter(["\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=bills.csv"},
+    )
+
+
+@router.get("/export/bill-details")
+async def export_bill_details_csv(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有详单为 CSV 文件"""
+    async with AsyncSessionLocal() as session:
+        stmt = (select(BillDetail, Bill.bill_code, Bill.vehicle_id)
+                .join(Bill, BillDetail.bill_id == Bill.id)
+                .order_by(BillDetail.id.desc()))
+        result = await session.execute(stmt)
+        rows = result.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "详单ID", "账单编号", "车牌号", "时段类型",
+        "开始时刻", "结束时刻", "持续(分钟)",
+        "电量(kWh)", "电价(元/kWh)", "费用(元)",
+    ])
+    for detail, bill_code, vehicle_id in rows:
+        period_name = {"peak": "峰时", "flat": "平时", "valley": "谷时"}.get(
+            detail.period, detail.period)
+        writer.writerow([
+            detail.id, bill_code, vehicle_id, period_name,
+            detail.start_time or "", detail.end_time or "",
+            detail.duration_minutes or 0,
+            round(detail.kwh or 0, 4), round(detail.rate or 0, 2),
+            round(detail.fee or 0, 2),
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter(["\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=bill_details.csv"},
+    )

@@ -118,3 +118,47 @@ class PileStatusLog(Base):
     operator = Column(String(50), default="system",
                       comment="操作者(system/管理员用户名)")
     changed_at = Column(DateTime, default=func.now(), comment="变更时间")
+
+
+class Bill(Base):
+    """账单表：每笔已完成充电的费用汇总"""
+    __tablename__ = 'bills'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bill_code = Column(String(32), unique=True, nullable=False, comment="账单编号")
+    order_id = Column(Integer, ForeignKey("charge_orders.id"), nullable=False,
+                      comment="关联订单ID")
+    vehicle_id = Column(String(50), nullable=False, comment="车牌号")
+    pile_id = Column(String(50), nullable=True, comment="充电桩编号")
+    charge_type = Column(String(10), nullable=False, comment="Fast/Slow")
+
+    charge_start_time = Column(DateTime, comment="充电启动时间")
+    charge_end_time = Column(DateTime, comment="充电结束时间")
+    charge_duration = Column(Float, comment="充电时长(小时)")
+    total_power = Column(Float, comment="充电电量(kWh)")
+
+    power_fee = Column(Float, default=0.0, comment="充电费用")
+    service_fee = Column(Float, default=0.0, comment="服务费用")
+    total_fee = Column(Float, default=0.0, comment="总费用")
+
+    created_at = Column(DateTime, default=func.now(), comment="账单生成时间")
+
+    order = relationship("ChargeOrder", backref="bill", foreign_keys=[order_id])
+
+
+class BillDetail(Base):
+    """详单表：账单中每个时段的费用明细"""
+    __tablename__ = 'bill_details'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bill_id = Column(Integer, ForeignKey("bills.id"), nullable=False,
+                     comment="关联账单ID")
+    period = Column(String(10), nullable=False, comment="时段类型: peak/flat/valley")
+    start_time = Column(String(10), comment="时段开始时刻 HH:MM")
+    end_time = Column(String(10), comment="时段结束时刻 HH:MM")
+    duration_minutes = Column(Integer, default=0, comment="该段持续分钟数")
+    kwh = Column(Float, default=0.0, comment="该段充电量(kWh)")
+    rate = Column(Float, default=0.0, comment="该段电价(元/kWh)")
+    fee = Column(Float, default=0.0, comment="该段充电费用(元)")
+
+    bill = relationship("Bill", backref="details", foreign_keys=[bill_id])
