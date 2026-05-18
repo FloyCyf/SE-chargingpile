@@ -892,6 +892,18 @@ class SmartScheduler:
         """关闭充电桩（等同于故障处理）"""
         return await self.fault_pile(pile_id)
 
+    async def update_power(self, fast_power: float, slow_power: float) -> dict:
+        """更新充电功率配置"""
+        async with self.lock:
+            self.fast_power = float(fast_power)
+            self.slow_power = float(slow_power)
+            for pile in self.piles:
+                if pile.type == "Fast":
+                    pile.power = self.fast_power
+                elif pile.type == "Slow":
+                    pile.power = self.slow_power
+            return {"status": "success", "message": f"功率已更新为 快充: {self.fast_power}kW, 慢充: {self.slow_power}kW"}
+
     # ------------------------------------------------------------------
     #  查询方法
     # ------------------------------------------------------------------

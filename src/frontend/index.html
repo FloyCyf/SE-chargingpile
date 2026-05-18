@@ -274,10 +274,10 @@
                         <label class="block text-sm text-gray-500 mb-2">充电模式</label>
                         <div class="grid grid-cols-2 gap-3">
                             <button id="btn-fast" onclick="setChargeMode('Fast')" class="btn-primary py-3 text-white rounded-lg font-medium">
-                                ⚡ 快充 (30度/小时)
+                                ⚡ 快充 (<span id="btn-fast-pwr">30</span>度/小时)
                             </button>
                             <button id="btn-slow" onclick="setChargeMode('Slow')" class="btn-secondary py-3 text-white rounded-lg font-medium">
-                                🔌 慢充 (10度/小时)
+                                🔌 慢充 (<span id="btn-slow-pwr">10</span>度/小时)
                             </button>
                         </div>
                     </div>
@@ -356,7 +356,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <h3 class="text-lg font-semibold mb-3">
-                        <span class="badge badge-fast">⚡ 快充桩 (30度/小时)</span>
+                        <span class="badge badge-fast">⚡ 快充桩 (<span id="status-fast-pwr">30</span>度/小时)</span>
                         <span class="text-sm text-gray-400 ml-2">
                             可用: <span id="fast-available-count" class="text-green-600 font-semibold">0</span>/3
                         </span>
@@ -367,7 +367,7 @@
 
                 <div>
                     <h3 class="text-lg font-semibold mb-3">
-                        <span class="badge badge-slow">🔌 慢充桩 (10度/小时)</span>
+                        <span class="badge badge-slow">🔌 慢充桩 (<span id="status-slow-pwr">10</span>度/小时)</span>
                         <span class="text-sm text-gray-400 ml-2">
                             可用: <span id="slow-available-count" class="text-green-600 font-semibold">0</span>/2
                         </span>
@@ -457,6 +457,8 @@
     <script>
         let chargeMode = 'Fast';
         let currentVehicleId = '';
+        let globalFastPower = 30;
+        let globalSlowPower = 10;
         let vehicleRegistered = false;
         let vehicleBatteryCap = 60;
         let vehicleCurrentKwh = 0;
@@ -572,7 +574,7 @@
 
         function updateEstimated() {
             const capacity = parseFloat(document.getElementById('capacity').value) || 0;
-            const power = chargeMode === 'Fast' ? 30 : 10;
+            const power = chargeMode === 'Fast' ? globalFastPower : globalSlowPower;
             const hours = capacity / power;
             const minutes = Math.floor((hours - Math.floor(hours)) * 60);
             
@@ -892,6 +894,20 @@
 
                 const fastAvailable = fastPiles.filter(p => p.status === '空闲').length;
                 const slowAvailable = slowPiles.filter(p => p.status === '空闲').length;
+
+                if (fastPiles.length > 0 && fastPiles[0].power) {
+                    globalFastPower = fastPiles[0].power;
+                    document.getElementById('btn-fast-pwr').textContent = globalFastPower;
+                    document.getElementById('status-fast-pwr').textContent = globalFastPower;
+                }
+                if (slowPiles.length > 0 && slowPiles[0].power) {
+                    globalSlowPower = slowPiles[0].power;
+                    document.getElementById('btn-slow-pwr').textContent = globalSlowPower;
+                    document.getElementById('status-slow-pwr').textContent = globalSlowPower;
+                }
+                
+                // Refresh estimated time since power might have changed
+                updateEstimated();
 
                 document.getElementById('fast-available-count').textContent = fastAvailable;
                 document.getElementById('slow-available-count').textContent = slowAvailable;

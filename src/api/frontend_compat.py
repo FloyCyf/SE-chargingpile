@@ -117,7 +117,8 @@ async def get_pile_status(request: Request):
             "status": "充电中" if is_charging else ("故障" if p["status"]=="FAULT" else "空闲"),
             "current_user": current_user,
             "charged_electricity": cur_soc*100 if is_charging else 0, # rough display
-            "charged_duration": dur or 0
+            "charged_duration": dur or 0,
+            "power": p.get("power", 0)
         })
     return res
 
@@ -160,6 +161,16 @@ async def get_order_detail(order_id: int):
         "duration": o.charge_duration or 0, "electricity_fee": o.power_fee or 0,
         "service_fee": o.service_fee or 0, "total_fee": o.total_fee or 0
     }
+
+class PowerConfigBody(BaseModel):
+    fast_power: float
+    slow_power: float
+
+@router.post("/compat/config/power")
+async def update_power_config(body: PowerConfigBody, request: Request):
+    scheduler = request.app.state.scheduler
+    res = await scheduler.update_power(body.fast_power, body.slow_power)
+    return res
 
 @router.get("/compat/dump")
 async def compat_dump(request: Request):
