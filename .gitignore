@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Local SQLite runtime database
+charging.db
+
+# Office temporary lock files
+~$*.docx
+
 # C extensions
 *.so
 

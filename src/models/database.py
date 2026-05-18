@@ -1,7 +1,7 @@
 import hashlib
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from src.models.models import Base, User
+from src.models.models import Base, ChargingPile, User
 
 DB_PATH = "sqlite+aiosqlite:///./charging.db"
 
@@ -41,6 +41,38 @@ async def seed_admin():
             )
             session.add(admin)
             await session.commit()
+
+
+async def seed_charging_piles(config: dict):
+    """Ensure configured charging piles exist in the database."""
+    system_cfg = config.get("system", {})
+    fast_count = system_cfg.get(
+        "fast_pile_count", system_cfg.get("fast_charging_piles", 3))
+    slow_count = system_cfg.get(
+        "slow_pile_count", system_cfg.get("slow_charging_piles", 2))
+
+    expected = [
+        (f"F{i + 1}", "Fast") for i in range(fast_count)
+    ] + [
+        (f"T{i + 1}", "Slow") for i in range(slow_count)
+    ]
+
+    async with AsyncSessionLocal() as session:
+        for pile_id, pile_type in expected:
+            result = await session.execute(
+                select(ChargingPile).where(ChargingPile.pile_id == pile_id)
+            )
+            pile = result.scalars().first()
+            if pile is None:
+                session.add(ChargingPile(
+                    pile_id=pile_id,
+                    pile_type=pile_type,
+                    status="IDLE",
+                ))
+            else:
+                pile.pile_type = pile_type
+                pile.status = pile.status or "IDLE"
+        await session.commit()
 
 
 async def get_db_session():

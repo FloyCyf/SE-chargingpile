@@ -11,7 +11,7 @@ from src.api.admin_routes import router as admin_router
 from src.api.frontend_compat import router as compat_router
 from src.core.scheduler import SmartScheduler
 from src.core.billing import init_billing_config
-from src.models.database import init_db, seed_admin
+from src.models.database import init_db, seed_admin, seed_charging_piles
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
     print("[Lifecycle] Initializing SQLite Database tables...")
     await init_db()
     await seed_admin()
+    await seed_charging_piles(config_data)
 
     print("[Lifecycle] Initializing billing config from config.yaml...")
     init_billing_config(config_data)
