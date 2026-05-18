@@ -2,7 +2,8 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from src.models.database import AsyncSessionLocal
-from src.models.models import ChargeOrder
+from src.models.models import ChargeOrder, Vehicle
+from src.core.billing import calculate_fee
 from datetime import datetime
 
 router = APIRouter()
@@ -33,17 +34,24 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
     
     for idx, q in enumerate(qdata.get("fast_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
-            return {"status": "WAITING", "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "15"}
+            return {"status": "WAITING", "area": "等候区", "area_detail": "快充等候队列第" + str(idx+1) + "位",
+                    "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "15"}
             
     for idx, q in enumerate(qdata.get("slow_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
-            return {"status": "WAITING", "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "30"}
+            return {"status": "WAITING", "area": "等候区", "area_detail": "慢充等候队列第" + str(idx+1) + "位",
+                    "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "30"}
             
     for p in status.get("piles", []):
         for idx, q in enumerate(p.get("queue_items", [])):
             if q["vehicle_id"] == vehicle_id:
                 state = "CHARGING" if idx == 0 and p["status"] == "CHARGING" else "QUEUING"
-                return {"status": state, "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "0"}
+                if state == "CHARGING":
+                    area_detail = "正在 " + p["pile_id"] + " 充电中"
+                else:
+                    area_detail = p["pile_id"] + " 队列第" + str(idx+1) + "位等待"
+                return {"status": state, "area": "充电区", "area_detail": area_detail,
+                        "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "0"}
     
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -51,7 +59,9 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
         )
         order = result.scalars().first()
         if order and order.status in ["COMPLETED", "FAULTED"]:
-            return {"status": order.status, "order_id": order.id, "queue_id": order.pile_id, "queue_position": 0, "estimated_wait_time": "-"}
+            area_detail = "充电完成" if order.status == "COMPLETED" else "因故障中断"
+            return {"status": order.status, "area": "已离开", "area_detail": area_detail,
+                    "order_id": order.id, "queue_id": order.pile_id, "queue_position": 0, "estimated_wait_time": "-"}
             
     raise HTTPException(404, "Vehicle not found")
 
@@ -118,19 +128,26 @@ async def get_orders(vehicle_id: str):
         orders = result.scalars().all()
     out = []
     for o in orders:
-        out.append({
+        item = {
             "order_id": o.id,
-            "bill_code": o.bill_code or f"Order-{o.id}", 
+            "bill_code": o.bill_code or f"Order-{o.id}",
             "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
-            "pile_id": o.pile_id or "--", 
+            "pile_id": o.pile_id or "--",
             "electricity": o.total_power or 0,
-            "duration": o.charge_duration or 0, 
+            "duration": o.charge_duration or 0,
             "start_time": o.charge_start_time.isoformat() if getattr(o, "charge_start_time", None) else "--",
             "end_time": o.charge_end_time.isoformat() if getattr(o, "charge_end_time", None) else "--",
             "power_fee": o.power_fee or 0,
             "service_fee": o.service_fee or 0,
-            "total_fee": o.total_fee or 0
-        })
+            "total_fee": o.total_fee or 0,
+            "detail": None,
+        }
+        if (o.charge_start_time and o.charge_end_time
+                and o.total_power and o.total_power > 0):
+            fee_result = calculate_fee(
+                o.charge_start_time, o.charge_end_time, o.total_power)
+            item["detail"] = fee_result.get("detail")
+        out.append(item)
     return out
 
 @router.get("/order/{order_id}")
@@ -172,7 +189,7 @@ async def compat_dump(request: Request):
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
             "queue_duration": dur,
-            "battery_capacity": 100,
+            "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["slow_queue"] = []
     for q in qdata["slow_waiting"]:
@@ -184,8 +201,75 @@ async def compat_dump(request: Request):
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
             "queue_duration": dur,
-            "battery_capacity": 100,
+            "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["fast_queue_count"] = status["fast_waiting_count"]
     status["slow_queue_count"] = status["slow_waiting_count"]
     return status
+
+
+# ------------------------------------------------------------------
+#  车辆管理（无需认证的兼容接口）
+# ------------------------------------------------------------------
+
+class VehicleRegBody(BaseModel):
+    vehicle_id: str
+    battery_capacity_kwh: float = 60.0
+    current_kwh: float = 0.0
+
+
+@router.post("/vehicle/register")
+async def register_vehicle_compat(body: VehicleRegBody):
+    """注册车辆（无需认证），如果已注册则返回现有信息"""
+    if body.current_kwh > body.battery_capacity_kwh:
+        raise HTTPException(
+            status_code=400, detail="当前电量不能超过电池最大容量")
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Vehicle).where(Vehicle.vehicle_id == body.vehicle_id)
+        )
+        existing = result.scalars().first()
+        if existing:
+            return {
+                "status": "exists",
+                "vehicle_id": existing.vehicle_id,
+                "battery_capacity_kwh": existing.battery_capacity_kwh,
+                "current_kwh": existing.current_kwh,
+            }
+
+        vehicle = Vehicle(
+            vehicle_id=body.vehicle_id,
+            battery_capacity_kwh=body.battery_capacity_kwh,
+            current_kwh=body.current_kwh,
+        )
+        session.add(vehicle)
+        await session.commit()
+        await session.refresh(vehicle)
+
+    return {
+        "status": "created",
+        "vehicle_id": vehicle.vehicle_id,
+        "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+        "current_kwh": vehicle.current_kwh,
+    }
+
+
+@router.get("/vehicle/info/{vehicle_id}")
+async def get_vehicle_info_compat(vehicle_id: str):
+    """查询车辆信息（无需认证）"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Vehicle).where(Vehicle.vehicle_id == vehicle_id)
+        )
+        vehicle = result.scalars().first()
+
+    if vehicle is None:
+        return {"status": "not_found", "vehicle_id": vehicle_id}
+
+    return {
+        "status": "found",
+        "vehicle_id": vehicle.vehicle_id,
+        "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+        "current_kwh": vehicle.current_kwh,
+    }

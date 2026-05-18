@@ -324,8 +324,14 @@
                     <button onclick="showTab('report')" id="tab-report" class="px-4 py-2 text-gray-500 hover:text-gray-800">
                         数据报表
                     </button>
+                    <button onclick="showTab('ordermgr')" id="tab-ordermgr" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        订单管理
+                    </button>
                     <button onclick="showTab('settings')" id="tab-settings" class="px-4 py-2 text-gray-500 hover:text-gray-800">
                         系统设置
+                    </button>
+                    <button onclick="showTab('statuslog')" id="tab-statuslog" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                        状态日志
                     </button>
                 </div>
                 <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
@@ -532,25 +538,182 @@
                     <h3 class="text-base font-semibold mb-3 text-gray-800">计费设置</h3>
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">峰时电价 (10:00-15:00, 18:00-21:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">峰时电价 (元/kWh)</label>
                             <input type="number" id="peak-price" step="0.1" min="0" value="1.0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">平时电价 (7:00-10:00, 15:00-18:00, 21:00-23:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">峰时时段 (如 10-15,18-21)</label>
+                            <input type="text" id="peak-hours" value="10-15,18-21" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 10-15,18-21">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">平时电价 (元/kWh)</label>
                             <input type="number" id="normal-price" step="0.1" min="0" value="0.7" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">谷时电价 (23:00-次日7:00)</label>
+                            <label class="block text-sm text-gray-500 mb-2">平时时段 (如 7-10,15-18,21-23)</label>
+                            <input type="text" id="flat-hours" value="7-10,15-18,21-23" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 7-10,15-18,21-23">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">谷时电价 (元/kWh)</label>
                             <input type="number" id="valley-price" step="0.1" min="0" value="0.4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-2">服务费单价</label>
+                            <label class="block text-sm text-gray-500 mb-2">谷时时段 (如 23-24,0-7)</label>
+                            <input type="text" id="valley-hours" value="23-24,0-7" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="格式: 23-24,0-7">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">服务费单价 (元/kWh)</label>
                             <input type="number" id="service-fee" step="0.1" min="0" value="0.8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         </div>
                         <button onclick="savePriceSettings()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
-                            保存设置
+                            保存计费设置
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态日志面板 -->
+        <div id="statuslog-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">充电桩状态变更日志</h2>
+                <div class="flex items-center gap-3">
+                    <select id="log-pile-filter" onchange="loadStatusLogs()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="">全部充电桩</option>
+                        <option value="F1">F1</option>
+                        <option value="F2">F2</option>
+                        <option value="F3">F3</option>
+                        <option value="T1">T1</option>
+                        <option value="T2">T2</option>
+                    </select>
+                    <button onclick="loadStatusLogs()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                        刷新
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600">
+                            <th class="py-3 px-4 text-left font-semibold">时间</th>
+                            <th class="py-3 px-4 text-left font-semibold">充电桩</th>
+                            <th class="py-3 px-4 text-left font-semibold">状态变更</th>
+                            <th class="py-3 px-4 text-left font-semibold">原因</th>
+                            <th class="py-3 px-4 text-left font-semibold">操作者</th>
+                        </tr>
+                    </thead>
+                    <tbody id="status-log-body">
+                        <tr><td colspan="5" class="text-center py-8 text-gray-400">暂无日志</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center mt-4">
+                <span class="text-sm text-gray-500">共 <span id="log-total">0</span> 条记录</span>
+                <div class="flex gap-2">
+                    <button onclick="logPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                    <span class="px-3 py-1 text-sm text-gray-600">第 <span id="log-page">1</span> 页</span>
+                    <button onclick="logPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 订单管理面板 -->
+        <div id="ordermgr-panel" class="card bg-white rounded-lg p-6" style="display: none;">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">订单 / 账单 / 详单管理</h2>
+
+            <!-- 子 Tab -->
+            <div class="flex border-b border-gray-200 mb-4">
+                <button onclick="showOrderSubTab('orders')" id="sub-tab-orders" class="px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">
+                    订单列表
+                </button>
+                <button onclick="showOrderSubTab('bills')" id="sub-tab-bills" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                    账单列表
+                </button>
+                <button onclick="showOrderSubTab('details')" id="sub-tab-details" class="px-4 py-2 text-gray-500 hover:text-gray-800">
+                    详单列表
+                </button>
+            </div>
+
+            <!-- 导出按钮行 -->
+            <div class="flex gap-3 mb-4">
+                <button onclick="exportCSV('orders')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出订单 CSV
+                </button>
+                <button onclick="exportCSV('bills')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出账单 CSV
+                </button>
+                <button onclick="exportCSV('bill-details')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                    导出详单 CSV
+                </button>
+            </div>
+
+            <!-- 订单子面板 -->
+            <div id="sub-orders-panel">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600">
+                                <th class="py-2 px-3 text-left font-semibold">ID</th>
+                                <th class="py-2 px-3 text-left font-semibold">车牌号</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电桩</th>
+                                <th class="py-2 px-3 text-left font-semibold">模式</th>
+                                <th class="py-2 px-3 text-left font-semibold">请求(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">实际(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">状态</th>
+                                <th class="py-2 px-3 text-left font-semibold">总费用</th>
+                                <th class="py-2 px-3 text-left font-semibold">创建时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-orders-body">
+                            <tr><td colspan="9" class="text-center py-8 text-gray-400">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-between items-center mt-3">
+                    <span class="text-sm text-gray-500">共 <span id="admin-orders-total">0</span> 条</span>
+                    <div class="flex gap-2">
+                        <button onclick="orderPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                        <span class="px-3 py-1 text-sm text-gray-600">第 <span id="admin-orders-page">1</span> 页</span>
+                        <button onclick="orderPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 账单子面板 -->
+            <div id="sub-bills-panel" style="display:none;">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600">
+                                <th class="py-2 px-3 text-left font-semibold">账单编号</th>
+                                <th class="py-2 px-3 text-left font-semibold">车牌号</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电桩</th>
+                                <th class="py-2 px-3 text-left font-semibold">电量(kWh)</th>
+                                <th class="py-2 px-3 text-left font-semibold">充电费</th>
+                                <th class="py-2 px-3 text-left font-semibold">服务费</th>
+                                <th class="py-2 px-3 text-left font-semibold">总费用</th>
+                                <th class="py-2 px-3 text-left font-semibold">时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-bills-body">
+                            <tr><td colspan="8" class="text-center py-8 text-gray-400">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-between items-center mt-3">
+                    <span class="text-sm text-gray-500">共 <span id="admin-bills-total">0</span> 条</span>
+                    <div class="flex gap-2">
+                        <button onclick="billPagePrev()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">上一页</button>
+                        <span class="px-3 py-1 text-sm text-gray-600">第 <span id="admin-bills-page">1</span> 页</span>
+                        <button onclick="billPageNext()" class="px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 text-sm">下一页</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 详单子面板 -->
+            <div id="sub-details-panel" style="display:none;">
+                <div id="admin-details-content" class="space-y-3">
+                    <div class="text-center py-8 text-gray-400">请先在"账单列表"中点击某条账单查看详单</div>
                 </div>
             </div>
         </div>
@@ -638,34 +801,48 @@
             const monitorTab = document.getElementById('tab-monitor');
             const reportTab = document.getElementById('tab-report');
             const settingsTab = document.getElementById('tab-settings');
+            const statuslogTab = document.getElementById('tab-statuslog');
+            const ordermgrTab = document.getElementById('tab-ordermgr');
             const monitorPanel = document.getElementById('monitor-panel');
             const reportPanel = document.getElementById('report-panel');
             const settingsPanel = document.getElementById('settings-panel');
+            const statuslogPanel = document.getElementById('statuslog-panel');
+            const ordermgrPanel = document.getElementById('ordermgr-panel');
             const chartsPanel = document.getElementById('charts-panel');
 
             monitorTab.classList.remove('tab-active');
             reportTab.classList.remove('tab-active');
             settingsTab.classList.remove('tab-active');
+            statuslogTab.classList.remove('tab-active');
+            ordermgrTab.classList.remove('tab-active');
+
+            monitorPanel.style.display = 'none';
+            reportPanel.style.display = 'none';
+            settingsPanel.style.display = 'none';
+            statuslogPanel.style.display = 'none';
+            ordermgrPanel.style.display = 'none';
+            chartsPanel.style.display = 'none';
 
             if (tab === 'monitor') {
                 monitorTab.classList.add('tab-active');
                 monitorPanel.style.display = 'block';
-                reportPanel.style.display = 'none';
-                settingsPanel.style.display = 'none';
                 chartsPanel.style.display = 'grid';
             } else if (tab === 'report') {
                 reportTab.classList.add('tab-active');
-                monitorPanel.style.display = 'none';
                 reportPanel.style.display = 'block';
-                settingsPanel.style.display = 'none';
-                chartsPanel.style.display = 'none';
                 loadReportData();
+            } else if (tab === 'statuslog') {
+                statuslogTab.classList.add('tab-active');
+                statuslogPanel.style.display = 'block';
+                loadStatusLogs();
+            } else if (tab === 'ordermgr') {
+                ordermgrTab.classList.add('tab-active');
+                ordermgrPanel.style.display = 'block';
+                loadAdminOrders();
             } else {
                 settingsTab.classList.add('tab-active');
-                monitorPanel.style.display = 'none';
-                reportPanel.style.display = 'none';
                 settingsPanel.style.display = 'block';
-                chartsPanel.style.display = 'none';
+                loadBillingConfig();
             }
         }
 
@@ -741,7 +918,9 @@
                             </span>
                         </div>
                         ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
+                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
+                            </div>
                             <div class="mb-2">
                                 <div class="flex justify-between text-xs mb-1">
                                     <span class="text-gray-400">充电进度</span>
@@ -783,7 +962,9 @@
                             </span>
                         </div>
                         ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}</div>
+                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
+                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
+                            </div>
                             <div class="mb-2">
                                 <div class="flex justify-between text-xs mb-1">
                                     <span class="text-gray-400">充电进度</span>
@@ -820,6 +1001,9 @@
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="badge badge-fast">F${i + 1}</span>
                         </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
+                        </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
                         </div>
@@ -838,6 +1022,9 @@
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="badge badge-slow">T${i + 1}</span>
+                        </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
                         </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
@@ -862,6 +1049,9 @@
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
                             <span class="${q.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${q.queue_num}</span>
+                        </div>
+                        <div class="text-xs mt-1">
+                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
                         </div>
                         <div class="text-xs text-gray-400 mt-1">
                             电池: ${q.battery_capacity}度 | 请求: ${q.requested_capacity}度 | ${formatDuration(q.queue_duration)}
@@ -956,8 +1146,70 @@
             showNotification('充电桩设置已保存', 'success');
         }
 
-        function savePriceSettings() {
-            showNotification('计费设置已保存', 'success');
+        // ---- 计费配置 ----
+
+        function hoursArrayToStr(arr) {
+            return arr.map(pair => pair[0] + '-' + pair[1]).join(',');
+        }
+
+        function strToHoursArray(str) {
+            if (!str || !str.trim()) return [];
+            return str.split(',').map(s => {
+                const parts = s.trim().split('-');
+                return [parseInt(parts[0]), parseInt(parts[1])];
+            });
+        }
+
+        async function loadBillingConfig() {
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/billing-config', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const cfg = await res.json();
+                document.getElementById('peak-price').value = cfg.peak_rate;
+                document.getElementById('normal-price').value = cfg.flat_rate;
+                document.getElementById('valley-price').value = cfg.valley_rate;
+                document.getElementById('service-fee').value = cfg.service_fee_rate;
+                document.getElementById('peak-hours').value = hoursArrayToStr(cfg.peak_hours || []);
+                document.getElementById('flat-hours').value = hoursArrayToStr(cfg.flat_hours || []);
+                document.getElementById('valley-hours').value = hoursArrayToStr(cfg.valley_hours || []);
+            } catch (e) {
+                console.error('Error loading billing config:', e);
+            }
+        }
+
+        async function savePriceSettings() {
+            const body = {
+                peak_rate: parseFloat(document.getElementById('peak-price').value),
+                flat_rate: parseFloat(document.getElementById('normal-price').value),
+                valley_rate: parseFloat(document.getElementById('valley-price').value),
+                service_fee_rate: parseFloat(document.getElementById('service-fee').value),
+                peak_hours: strToHoursArray(document.getElementById('peak-hours').value),
+                flat_hours: strToHoursArray(document.getElementById('flat-hours').value),
+                valley_hours: strToHoursArray(document.getElementById('valley-hours').value),
+            };
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/billing-config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token,
+                    },
+                    body: JSON.stringify(body),
+                });
+                if (res.ok) {
+                    showNotification('计费设置已保存并生效', 'success');
+                } else {
+                    const data = await res.json();
+                    showNotification('保存失败: ' + (data.detail || '未知错误'), 'error');
+                }
+            } catch (e) {
+                console.error('Error saving billing config:', e);
+                showNotification('保存失败: 网络错误', 'error');
+            }
         }
 
         function showHelp() {
@@ -966,6 +1218,82 @@
 
         function closeHelp() {
             document.getElementById('helpModal').style.display = 'none';
+        }
+
+        // ---- 状态日志相关 ----
+        let logCurrentPage = 1;
+        const logPageSize = 20;
+        let logTotalCount = 0;
+
+        function statusBadge(status) {
+            const map = {
+                'IDLE': 'background:rgba(136,163,136,0.2);color:#6e896e',
+                'CHARGING': 'background:rgba(102,126,234,0.2);color:#667eea',
+                'FAULT': 'background:rgba(200,140,140,0.2);color:#ad7272',
+            };
+            const s = map[status] || 'background:#eee;color:#666';
+            return `<span style="${s};padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:500">${status}</span>`;
+        }
+
+        async function loadStatusLogs() {
+            const pileFilter = document.getElementById('log-pile-filter').value;
+            const offset = (logCurrentPage - 1) * logPageSize;
+            let url = `/api/admin/pile-status-logs?limit=${logPageSize}&offset=${offset}`;
+            if (pileFilter) url += `&pile_id=${pileFilter}`;
+
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    document.getElementById('status-log-body').innerHTML =
+                        '<tr><td colspan="5" class="text-center py-8 text-gray-400">需要管理员权限登录</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                logTotalCount = data.total || 0;
+                document.getElementById('log-total').textContent = logTotalCount;
+                document.getElementById('log-page').textContent = logCurrentPage;
+
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('status-log-body').innerHTML =
+                        '<tr><td colspan="5" class="text-center py-8 text-gray-400">暂无日志记录</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.logs.forEach(log => {
+                    const time = log.changed_at ? formatDateTime(log.changed_at) : '--';
+                    html += `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-gray-600">${time}</td>
+                        <td class="py-3 px-4 font-semibold text-gray-800">${log.pile_id}</td>
+                        <td class="py-3 px-4">${statusBadge(log.old_status)} → ${statusBadge(log.new_status)}</td>
+                        <td class="py-3 px-4 text-gray-600 text-xs">${log.reason || '--'}</td>
+                        <td class="py-3 px-4 text-gray-500">${log.operator}</td>
+                    </tr>`;
+                });
+                document.getElementById('status-log-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading status logs:', e);
+                document.getElementById('status-log-body').innerHTML =
+                    '<tr><td colspan="5" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function logPagePrev() {
+            if (logCurrentPage > 1) {
+                logCurrentPage--;
+                loadStatusLogs();
+            }
+        }
+
+        function logPageNext() {
+            const maxPage = Math.ceil(logTotalCount / logPageSize) || 1;
+            if (logCurrentPage < maxPage) {
+                logCurrentPage++;
+                loadStatusLogs();
+            }
         }
 
         function initCharts() {
@@ -1024,6 +1352,202 @@
                     }
                 }
             });
+        }
+
+        // ---- 订单管理相关 ----
+        let orderCurrentPage = 1;
+        let billCurrentPage = 1;
+        const mgrPageSize = 20;
+        let orderTotalCount = 0;
+        let billTotalCount = 0;
+
+        function showOrderSubTab(sub) {
+            document.getElementById('sub-tab-orders').classList.remove('tab-active');
+            document.getElementById('sub-tab-bills').classList.remove('tab-active');
+            document.getElementById('sub-tab-details').classList.remove('tab-active');
+            document.getElementById('sub-orders-panel').style.display = 'none';
+            document.getElementById('sub-bills-panel').style.display = 'none';
+            document.getElementById('sub-details-panel').style.display = 'none';
+
+            if (sub === 'orders') {
+                document.getElementById('sub-tab-orders').classList.add('tab-active');
+                document.getElementById('sub-orders-panel').style.display = 'block';
+                loadAdminOrders();
+            } else if (sub === 'bills') {
+                document.getElementById('sub-tab-bills').classList.add('tab-active');
+                document.getElementById('sub-bills-panel').style.display = 'block';
+                loadAdminBills();
+            } else {
+                document.getElementById('sub-tab-details').classList.add('tab-active');
+                document.getElementById('sub-details-panel').style.display = 'block';
+            }
+        }
+
+        function orderStatusBadge(status) {
+            const map = {
+                'WAITING': 'background:rgba(212,180,131,0.2);color:#d4b483',
+                'QUEUING': 'background:rgba(125,148,166,0.2);color:#7d94a6',
+                'CHARGING': 'background:rgba(102,126,234,0.2);color:#667eea',
+                'COMPLETED': 'background:rgba(136,163,136,0.2);color:#6e896e',
+                'CANCELLED': 'background:rgba(143,138,126,0.2);color:#8f8a7e',
+                'FAULTED': 'background:rgba(200,140,140,0.2);color:#ad7272',
+            };
+            const s = map[status] || 'background:#eee;color:#666';
+            return '<span style="' + s + ';padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:500">' + status + '</span>';
+        }
+
+        async function loadAdminOrders() {
+            const offset = (orderCurrentPage - 1) * mgrPageSize;
+            const token = localStorage.getItem('admin_token') || '';
+            try {
+                const res = await fetch('/api/admin/orders?limit=' + mgrPageSize + '&offset=' + offset, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) {
+                    document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-400">需要管理员权限</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                orderTotalCount = data.total || 0;
+                document.getElementById('admin-orders-total').textContent = orderTotalCount;
+                document.getElementById('admin-orders-page').textContent = orderCurrentPage;
+
+                if (!data.orders || data.orders.length === 0) {
+                    document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-400">暂无订单</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.orders.forEach(o => {
+                    html += '<tr class="border-b border-gray-100 hover:bg-gray-50">';
+                    html += '<td class="py-2 px-3 text-gray-800 font-medium">' + o.order_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + o.vehicle_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.pile_id || '--') + '</td>';
+                    html += '<td class="py-2 px-3">' + (o.charge_type === 'Fast' ? '<span class="badge badge-fast">快充</span>' : '<span class="badge badge-slow">慢充</span>') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.requested_kwh || 0).toFixed(1) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (o.charged_kwh || 0).toFixed(1) + '</td>';
+                    html += '<td class="py-2 px-3">' + orderStatusBadge(o.status) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">' + (o.total_fee != null ? '¥' + o.total_fee.toFixed(2) : '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-500 text-xs">' + (o.created_at ? formatDateTime(o.created_at) : '--') + '</td>';
+                    html += '</tr>';
+                });
+                document.getElementById('admin-orders-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading admin orders:', e);
+                document.getElementById('admin-orders-body').innerHTML = '<tr><td colspan="9" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function orderPagePrev() {
+            if (orderCurrentPage > 1) { orderCurrentPage--; loadAdminOrders(); }
+        }
+        function orderPageNext() {
+            const maxPage = Math.ceil(orderTotalCount / mgrPageSize) || 1;
+            if (orderCurrentPage < maxPage) { orderCurrentPage++; loadAdminOrders(); }
+        }
+
+        async function loadAdminBills() {
+            const offset = (billCurrentPage - 1) * mgrPageSize;
+            const token = localStorage.getItem('admin_token') || '';
+            try {
+                const res = await fetch('/api/admin/bills?limit=' + mgrPageSize + '&offset=' + offset, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) {
+                    document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400">需要管理员权限</td></tr>';
+                    return;
+                }
+                const data = await res.json();
+                billTotalCount = data.total || 0;
+                document.getElementById('admin-bills-total').textContent = billTotalCount;
+                document.getElementById('admin-bills-page').textContent = billCurrentPage;
+
+                if (!data.bills || data.bills.length === 0) {
+                    document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400">暂无账单</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                data.bills.forEach(b => {
+                    html += '<tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="showBillDetails(' + JSON.stringify(b.details).replace(/"/g, '&quot;') + ', \'' + b.bill_code + '\')">';
+                    html += '<td class="py-2 px-3 text-blue-600 font-medium underline">' + b.bill_code + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + b.vehicle_id + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (b.pile_id || '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (b.total_power != null ? b.total_power.toFixed(2) : '--') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (b.power_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (b.service_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">¥' + (b.total_fee || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-500 text-xs">' + (b.created_at ? formatDateTime(b.created_at) : '--') + '</td>';
+                    html += '</tr>';
+                });
+                document.getElementById('admin-bills-body').innerHTML = html;
+            } catch (e) {
+                console.error('Error loading admin bills:', e);
+                document.getElementById('admin-bills-body').innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400">加载失败</td></tr>';
+            }
+        }
+
+        function billPagePrev() {
+            if (billCurrentPage > 1) { billCurrentPage--; loadAdminBills(); }
+        }
+        function billPageNext() {
+            const maxPage = Math.ceil(billTotalCount / mgrPageSize) || 1;
+            if (billCurrentPage < maxPage) { billCurrentPage++; loadAdminBills(); }
+        }
+
+        function showBillDetails(details, billCode) {
+            showOrderSubTab('details');
+            const periodNames = {peak: '峰时', flat: '平时', valley: '谷时'};
+            const periodColors = {peak: '#c88c8c', flat: '#d4b483', valley: '#88a388'};
+            let html = '<h3 class="text-base font-semibold text-gray-800 mb-3">账单 ' + billCode + ' 的时段详单</h3>';
+            if (!details || details.length === 0) {
+                html += '<div class="text-center py-8 text-gray-400">该账单无详单记录</div>';
+            } else {
+                html += '<table class="w-full text-sm"><thead><tr class="bg-gray-50 text-gray-600">';
+                html += '<th class="py-2 px-3 text-left font-semibold">时段</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">时间</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">分钟</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">电量(kWh)</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">电价</th>';
+                html += '<th class="py-2 px-3 text-left font-semibold">费用</th>';
+                html += '</tr></thead><tbody>';
+                details.forEach(d => {
+                    const pName = periodNames[d.period] || d.period;
+                    const pColor = periodColors[d.period] || '#666';
+                    html += '<tr class="border-b border-gray-100">';
+                    html += '<td class="py-2 px-3" style="color:' + pColor + ';font-weight:600">' + pName + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.start_time || '') + ' - ' + (d.end_time || '') + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.duration_minutes || 0) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">' + (d.kwh || 0).toFixed(4) + '</td>';
+                    html += '<td class="py-2 px-3 text-gray-600">¥' + (d.rate || 0).toFixed(2) + '</td>';
+                    html += '<td class="py-2 px-3 text-blue-600 font-semibold">¥' + (d.fee || 0).toFixed(2) + '</td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+            document.getElementById('admin-details-content').innerHTML = html;
+        }
+
+        function exportCSV(type) {
+            const token = localStorage.getItem('admin_token') || '';
+            const url = '/api/admin/export/' + type;
+            fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+                .then(res => {
+                    if (!res.ok) throw new Error('Export failed');
+                    return res.blob();
+                })
+                .then(blob => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = type + '.csv';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                    showNotification(type + ' CSV 已导出', 'success');
+                })
+                .catch(e => {
+                    console.error('Export error:', e);
+                    showNotification('导出失败，请确认管理员登录', 'error');
+                });
         }
 
         window.onload = function() {
