@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import csv
 import io
+import openpyxl
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -464,3 +465,304 @@ async def export_bill_details_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=bill_details.csv"},
     )
+
+
+# ---- 虚拟时钟管理 ----
+
+class ClockSetBody(BaseModel):
+    datetime: Optional[str] = None   # "YYYY-MM-DD HH:MM:SS" 或 "HH:MM:SS"（今日日期）
+    ratio: Optional[float] = None    # 时间推进倍率
+
+
+@router.get("/clock")
+async def get_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """获取当前虚拟时间和倍率"""
+    clock = request.app.state.scheduler.clock
+    return {
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+        "description": f"每真实1秒 = 虚拟{clock.ratio}分钟",
+    }
+
+
+@router.put("/clock")
+async def set_clock(
+    body: ClockSetBody,
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """设置虚拟时间或倍率（可单独设置其中一项）"""
+    clock = request.app.state.scheduler.clock
+    changed = []
+
+    if body.datetime is not None:
+        dt_str = body.datetime.strip()
+        # 支持 "HH:MM:SS" 或 "HH:MM" 格式（自动补今日日期）
+        if len(dt_str) <= 8:
+            from datetime import date as _date
+            today = _date.today().strftime("%Y-%m-%d")
+            dt_str = f"{today} {dt_str}"
+        new_dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                new_dt = datetime.strptime(dt_str, fmt)
+                break
+            except ValueError:
+                continue
+        if new_dt is None:
+            raise HTTPException(
+                status_code=400,
+                detail="时间格式错误，支持 HH:MM:SS 或 YYYY-MM-DD HH:MM:SS")
+        clock.set_time(new_dt)
+        changed.append(f"虚拟时间设为 {new_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if body.ratio is not None:
+        if body.ratio <= 0:
+            raise HTTPException(status_code=400, detail="倍率必须大于0")
+        clock.set_ratio(body.ratio)
+        changed.append(f"倍率设为 {body.ratio}（每真实1秒=虚拟{body.ratio}分钟）")
+
+    if not changed:
+        raise HTTPException(status_code=400, detail="请提供 datetime 或 ratio 字段")
+
+    return {
+        "status": "success",
+        "changed": changed,
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+    }
+
+
+@router.post("/clock/reset")
+async def reset_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """重置虚拟时间为当前真实时间（倍率不变）"""
+    clock = request.app.state.scheduler.clock
+    clock.reset()
+    return {
+        "status": "success",
+        "message": "虚拟时间已重置为当前真实时间",
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+    }
+
+
+# ---- 验收快照 ----
+
+@router.get("/acceptance/snapshot")
+async def acceptance_snapshot(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """
+    验收快照：按验收 Excel 结构返回当前全站状态。
+    返回每个桩的队列车辆（含当前费用）和等候区车辆。
+    """
+    scheduler = request.app.state.scheduler
+    status = scheduler.get_system_status()
+    waiting = scheduler.get_waiting_area()
+
+    fast_piles = {}
+    slow_piles = {}
+    for p in status["piles"]:
+        pile_info = {
+            "pile_id": p["pile_id"],
+            "type": p["type"],
+            "status": p["status"],
+            "power": p["power"],
+            "queue": [
+                {
+                    "position": qi["position"],
+                    "vehicle_id": qi["vehicle_id"],
+                    "queue_number": qi["queue_number"],
+                    "requested_kwh": qi["requested_kwh"],
+                    "charged_kwh": qi["charged_kwh"],
+                    "current_fee": qi.get("current_fee", 0.0),
+                    "current_power_fee": qi.get("current_power_fee", 0.0),
+                    "current_service_fee": qi.get("current_service_fee", 0.0),
+                    "charge_start_time": qi.get("charge_start_time"),
+                }
+                for qi in p["queue_items"]
+            ],
+        }
+        if p["type"] == "Fast":
+            fast_piles[p["pile_id"]] = pile_info
+        else:
+            slow_piles[p["pile_id"]] = pile_info
+
+    return {
+        "current_virtual_time": scheduler.clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "fast_piles": fast_piles,
+        "slow_piles": slow_piles,
+        "waiting_area": {
+            "fast_waiting": waiting["fast_waiting"],
+            "slow_waiting": waiting["slow_waiting"],
+            "fast_count": len(waiting["fast_waiting"]),
+            "slow_count": len(waiting["slow_waiting"]),
+        },
+    }
+
+
+# ---- 系统参数设置 ----
+
+class SystemParamsUpdate(BaseModel):
+    waiting_area_size: Optional[int] = None       # 等候区最大容量 N
+    pile_queue_length: Optional[int] = None       # 每桩总车位数 M
+    alpha: Optional[float] = None                 # 低电量权重
+    beta: Optional[float] = None                  # 充电模式权重
+    gamma: Optional[float] = None                 # 等待时间权重
+    fast_type_weight: Optional[float] = None      # 快充 W_type
+    slow_type_weight: Optional[float] = None      # 慢充 W_type
+
+
+@router.get("/system-params")
+async def get_system_params(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """查询当前系统调度参数"""
+    s = request.app.state.scheduler
+    return {
+        "waiting_area_size": s.waiting_capacity,
+        "pile_queue_length": s.pile_queue_length,
+        "alpha": s.priority_alpha,
+        "beta": s.priority_beta,
+        "gamma": s.priority_gamma,
+        "fast_type_weight": s.priority_fast_weight,
+        "slow_type_weight": s.priority_slow_weight,
+        "fast_power": s.fast_power,
+        "slow_power": s.slow_power,
+    }
+
+
+@router.put("/system-params")
+async def update_system_params(
+    body: SystemParamsUpdate,
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """运行时更新系统调度参数（等候区容量、桩队列长度、优先级权重）"""
+    params = body.model_dump(exclude_none=True)
+    if not params:
+        raise HTTPException(status_code=400, detail="未提供任何参数")
+    result = await request.app.state.scheduler.update_system_params(params)
+    if result["status"] == "failed":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+# ---- Excel 导出 ----
+
+def _make_xlsx_response(wb: "openpyxl.Workbook", filename: str) -> StreamingResponse:
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/orders.xlsx")
+async def export_orders_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有订单为 Excel 文件"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(ChargeOrder).order_by(ChargeOrder.id.desc()))
+        orders = result.scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "订单列表"
+    headers = [
+        "订单ID", "车牌号", "充电桩", "充电模式", "请求电量(kWh)",
+        "实际电量(kWh)", "排队号", "状态", "充电费(元)", "服务费(元)",
+        "总费用(元)", "创建时间", "开始充电", "完成时间",
+    ]
+    ws.append(headers)
+    for o in orders:
+        ws.append([
+            o.id, o.vehicle_id, o.pile_id or "", o.charge_type,
+            o.requested_kwh or 0, o.charged_kwh or 0,
+            o.queue_number or "", o.status,
+            o.power_fee or 0, o.service_fee or 0, o.total_fee or 0,
+            o.created_at.strftime("%Y-%m-%d %H:%M:%S") if o.created_at else "",
+            o.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if o.charge_start_time else "",
+            o.finished_at.strftime("%Y-%m-%d %H:%M:%S") if o.finished_at else "",
+        ])
+    return _make_xlsx_response(wb, "orders.xlsx")
+
+
+@router.get("/export/bills.xlsx")
+async def export_bills_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有账单为 Excel 文件"""
+    from sqlalchemy.orm import selectinload as _sel
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Bill).options(_sel(Bill.details)).order_by(Bill.id.desc()))
+        bills = result.scalars().unique().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "账单列表"
+    ws.append([
+        "账单编号", "订单ID", "车牌号", "充电桩", "充电模式",
+        "充电时长(h)", "充电电量(kWh)", "充电费(元)", "服务费(元)",
+        "总费用(元)", "开始时间", "结束时间", "账单生成时间",
+    ])
+    for b in bills:
+        ws.append([
+            b.bill_code, b.order_id, b.vehicle_id, b.pile_id or "",
+            b.charge_type, round(b.charge_duration or 0, 4),
+            round(b.total_power or 0, 4),
+            round(b.power_fee or 0, 2), round(b.service_fee or 0, 2),
+            round(b.total_fee or 0, 2),
+            b.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_start_time else "",
+            b.charge_end_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_end_time else "",
+            b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
+        ])
+    return _make_xlsx_response(wb, "bills.xlsx")
+
+
+@router.get("/export/bill-details.xlsx")
+async def export_bill_details_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有详单为 Excel 文件（含峰平谷分段）"""
+    async with AsyncSessionLocal() as session:
+        stmt = (select(BillDetail, Bill.bill_code, Bill.vehicle_id)
+                .join(Bill, BillDetail.bill_id == Bill.id)
+                .order_by(BillDetail.id.desc()))
+        result = await session.execute(stmt)
+        rows = result.all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "详单列表"
+    ws.append([
+        "详单ID", "账单编号", "车牌号", "时段类型",
+        "开始时刻", "结束时刻", "持续(分钟)",
+        "电量(kWh)", "电价(元/kWh)", "费用(元)",
+    ])
+    period_map = {"peak": "峰时", "flat": "平时", "valley": "谷时"}
+    for detail, bill_code, vehicle_id in rows:
+        ws.append([
+            detail.id, bill_code, vehicle_id,
+            period_map.get(detail.period, detail.period),
+            detail.start_time or "", detail.end_time or "",
+            detail.duration_minutes or 0,
+            round(detail.kwh or 0, 4),
+            round(detail.rate or 0, 2),
+            round(detail.fee or 0, 2),
+        ])
+    return _make_xlsx_response(wb, "bill_details.xlsx")

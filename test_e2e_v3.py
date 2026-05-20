@@ -235,7 +235,7 @@ class TestPerPileQueue:
             assert "queue_items" in p
             assert "queue_len" in p
             assert "max_queue_len" in p
-            assert p["max_queue_len"] == 2  # config: pile_queue_length=2
+            assert p["max_queue_len"] == 3  # config: pile_queue_length=3
 
     def test_queue_overflow_to_waiting(self, client):
         """桩队列满后，车辆进入等候区"""
@@ -500,7 +500,7 @@ class TestConfig:
         assert config_data['system']['fast_pile_count'] == 3
         assert config_data['system']['slow_pile_count'] == 2
         assert config_data['system']['waiting_area_size'] == 10
-        assert config_data['system']['pile_queue_length'] == 2
+        assert config_data['system']['pile_queue_length'] == 3
 
     def test_charging_config(self):
         from src.loader import config_data
