@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import csv
 import io
+import openpyxl
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -605,3 +606,163 @@ async def acceptance_snapshot(
             "slow_count": len(waiting["slow_waiting"]),
         },
     }
+
+
+# ---- 系统参数设置 ----
+
+class SystemParamsUpdate(BaseModel):
+    waiting_area_size: Optional[int] = None       # 等候区最大容量 N
+    pile_queue_length: Optional[int] = None       # 每桩总车位数 M
+    alpha: Optional[float] = None                 # 低电量权重
+    beta: Optional[float] = None                  # 充电模式权重
+    gamma: Optional[float] = None                 # 等待时间权重
+    fast_type_weight: Optional[float] = None      # 快充 W_type
+    slow_type_weight: Optional[float] = None      # 慢充 W_type
+
+
+@router.get("/system-params")
+async def get_system_params(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """查询当前系统调度参数"""
+    s = request.app.state.scheduler
+    return {
+        "waiting_area_size": s.waiting_capacity,
+        "pile_queue_length": s.pile_queue_length,
+        "alpha": s.priority_alpha,
+        "beta": s.priority_beta,
+        "gamma": s.priority_gamma,
+        "fast_type_weight": s.priority_fast_weight,
+        "slow_type_weight": s.priority_slow_weight,
+        "fast_power": s.fast_power,
+        "slow_power": s.slow_power,
+    }
+
+
+@router.put("/system-params")
+async def update_system_params(
+    body: SystemParamsUpdate,
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """运行时更新系统调度参数（等候区容量、桩队列长度、优先级权重）"""
+    params = body.model_dump(exclude_none=True)
+    if not params:
+        raise HTTPException(status_code=400, detail="未提供任何参数")
+    result = await request.app.state.scheduler.update_system_params(params)
+    if result["status"] == "failed":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+# ---- Excel 导出 ----
+
+def _make_xlsx_response(wb: "openpyxl.Workbook", filename: str) -> StreamingResponse:
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/orders.xlsx")
+async def export_orders_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有订单为 Excel 文件"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(ChargeOrder).order_by(ChargeOrder.id.desc()))
+        orders = result.scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "订单列表"
+    headers = [
+        "订单ID", "车牌号", "充电桩", "充电模式", "请求电量(kWh)",
+        "实际电量(kWh)", "排队号", "状态", "充电费(元)", "服务费(元)",
+        "总费用(元)", "创建时间", "开始充电", "完成时间",
+    ]
+    ws.append(headers)
+    for o in orders:
+        ws.append([
+            o.id, o.vehicle_id, o.pile_id or "", o.charge_type,
+            o.requested_kwh or 0, o.charged_kwh or 0,
+            o.queue_number or "", o.status,
+            o.power_fee or 0, o.service_fee or 0, o.total_fee or 0,
+            o.created_at.strftime("%Y-%m-%d %H:%M:%S") if o.created_at else "",
+            o.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if o.charge_start_time else "",
+            o.finished_at.strftime("%Y-%m-%d %H:%M:%S") if o.finished_at else "",
+        ])
+    return _make_xlsx_response(wb, "orders.xlsx")
+
+
+@router.get("/export/bills.xlsx")
+async def export_bills_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有账单为 Excel 文件"""
+    from sqlalchemy.orm import selectinload as _sel
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Bill).options(_sel(Bill.details)).order_by(Bill.id.desc()))
+        bills = result.scalars().unique().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "账单列表"
+    ws.append([
+        "账单编号", "订单ID", "车牌号", "充电桩", "充电模式",
+        "充电时长(h)", "充电电量(kWh)", "充电费(元)", "服务费(元)",
+        "总费用(元)", "开始时间", "结束时间", "账单生成时间",
+    ])
+    for b in bills:
+        ws.append([
+            b.bill_code, b.order_id, b.vehicle_id, b.pile_id or "",
+            b.charge_type, round(b.charge_duration or 0, 4),
+            round(b.total_power or 0, 4),
+            round(b.power_fee or 0, 2), round(b.service_fee or 0, 2),
+            round(b.total_fee or 0, 2),
+            b.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_start_time else "",
+            b.charge_end_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_end_time else "",
+            b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
+        ])
+    return _make_xlsx_response(wb, "bills.xlsx")
+
+
+@router.get("/export/bill-details.xlsx")
+async def export_bill_details_xlsx(
+    admin: dict = Depends(require_admin),
+):
+    """导出所有详单为 Excel 文件（含峰平谷分段）"""
+    async with AsyncSessionLocal() as session:
+        stmt = (select(BillDetail, Bill.bill_code, Bill.vehicle_id)
+                .join(Bill, BillDetail.bill_id == Bill.id)
+                .order_by(BillDetail.id.desc()))
+        result = await session.execute(stmt)
+        rows = result.all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "详单列表"
+    ws.append([
+        "详单ID", "账单编号", "车牌号", "时段类型",
+        "开始时刻", "结束时刻", "持续(分钟)",
+        "电量(kWh)", "电价(元/kWh)", "费用(元)",
+    ])
+    period_map = {"peak": "峰时", "flat": "平时", "valley": "谷时"}
+    for detail, bill_code, vehicle_id in rows:
+        ws.append([
+            detail.id, bill_code, vehicle_id,
+            period_map.get(detail.period, detail.period),
+            detail.start_time or "", detail.end_time or "",
+            detail.duration_minutes or 0,
+            round(detail.kwh or 0, 4),
+            round(detail.rate or 0, 2),
+            round(detail.fee or 0, 2),
+        ])
+    return _make_xlsx_response(wb, "bill_details.xlsx")

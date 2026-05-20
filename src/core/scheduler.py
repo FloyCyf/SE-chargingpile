@@ -975,6 +975,215 @@ class SmartScheduler:
                     pile.power = self.slow_power
             return {"status": "success", "message": f"功率已更新为 快充: {self.fast_power}kW, 慢充: {self.slow_power}kW"}
 
+    async def update_system_params(self, params: dict) -> dict:
+        """
+        运行时更新系统调度参数。
+        支持字段：waiting_area_size, pile_queue_length,
+                  alpha, beta, gamma, fast_type_weight, slow_type_weight
+        """
+        async with self.lock:
+            changed = []
+
+            if "waiting_area_size" in params:
+                n = int(params["waiting_area_size"])
+                current_total = (sum(len(p.queue) for p in self.piles)
+                                 + len(self.fast_waiting)
+                                 + len(self.slow_waiting))
+                if n < current_total:
+                    return {"status": "failed",
+                            "message": f"等候区容量 {n} 小于当前在队车辆数 {current_total}，拒绝修改"}
+                if n < 1:
+                    return {"status": "failed", "message": "等候区容量必须 ≥ 1"}
+                self.waiting_capacity = n
+                changed.append(f"等候区容量 → {n}")
+
+            if "pile_queue_length" in params:
+                m = int(params["pile_queue_length"])
+                max_current = max((len(p.queue) for p in self.piles), default=0)
+                if m < max_current:
+                    return {"status": "failed",
+                            "message": f"桩队列长度 {m} 小于当前最长队列 {max_current}，拒绝修改"}
+                if m < 1:
+                    return {"status": "failed", "message": "桩队列长度必须 ≥ 1"}
+                self.pile_queue_length = m
+                for pile in self.piles:
+                    pile.max_queue_length = m
+                changed.append(f"桩队列长度 → {m}")
+
+            if "alpha" in params:
+                v = float(params["alpha"])
+                if v < 0:
+                    return {"status": "failed", "message": "alpha 必须 ≥ 0"}
+                self.priority_alpha = v
+                changed.append(f"alpha → {v}")
+
+            if "beta" in params:
+                v = float(params["beta"])
+                if v < 0:
+                    return {"status": "failed", "message": "beta 必须 ≥ 0"}
+                self.priority_beta = v
+                changed.append(f"beta → {v}")
+
+            if "gamma" in params:
+                v = float(params["gamma"])
+                if v < 0:
+                    return {"status": "failed", "message": "gamma 必须 ≥ 0"}
+                self.priority_gamma = v
+                changed.append(f"gamma → {v}")
+
+            if "fast_type_weight" in params:
+                v = float(params["fast_type_weight"])
+                if v < 0:
+                    return {"status": "failed", "message": "fast_type_weight 必须 ≥ 0"}
+                self.priority_fast_weight = v
+                changed.append(f"fast_type_weight → {v}")
+
+            if "slow_type_weight" in params:
+                v = float(params["slow_type_weight"])
+                if v < 0:
+                    return {"status": "failed", "message": "slow_type_weight 必须 ≥ 0"}
+                self.priority_slow_weight = v
+                changed.append(f"slow_type_weight → {v}")
+
+            if not changed:
+                return {"status": "failed", "message": "未提供任何有效参数"}
+
+            return {
+                "status": "success",
+                "changed": changed,
+                "current": {
+                    "waiting_area_size": self.waiting_capacity,
+                    "pile_queue_length": self.pile_queue_length,
+                    "alpha": self.priority_alpha,
+                    "beta": self.priority_beta,
+                    "gamma": self.priority_gamma,
+                    "fast_type_weight": self.priority_fast_weight,
+                    "slow_type_weight": self.priority_slow_weight,
+                }
+            }
+
+    # ------------------------------------------------------------------
+    #  服务重启恢复
+    # ------------------------------------------------------------------
+
+    async def restore_from_db(self):
+        """
+        从数据库恢复未完成的订单到内存队列。
+        - CHARGING 状态订单恢复到对应桩 position 0
+        - QUEUING  状态订单恢复到对应桩后续位置
+        - WAITING  状态订单恢复到等候区
+        恢复后按 started_at / created_at 排序，保证位置正确。
+        """
+        from src.models.models import Vehicle as _Vehicle
+        async with AsyncSessionLocal() as session:
+            # 查所有未完成订单
+            stmt = (select(ChargeOrder)
+                    .where(ChargeOrder.status.in_([
+                        OrderStatus.CHARGING,
+                        OrderStatus.QUEUING,
+                        OrderStatus.WAITING,
+                    ]))
+                    .order_by(ChargeOrder.started_at.nulls_last(),
+                              ChargeOrder.created_at))
+            result = await session.execute(stmt)
+            orders = result.scalars().all()
+
+            if not orders:
+                print("[Restore] 无未完成订单，跳过恢复。")
+                return
+
+            # 预取车辆信息
+            vehicle_ids = list({o.vehicle_id for o in orders})
+            veh_result = await session.execute(
+                select(_Vehicle).where(_Vehicle.vehicle_id.in_(vehicle_ids)))
+            vehicles = {v.vehicle_id: v for v in veh_result.scalars().all()}
+
+        print(f"[Restore] 发现 {len(orders)} 笔未完成订单，开始恢复...")
+
+        # 先恢复 CHARGING / QUEUING（按 pile_id 分组）
+        pile_orders: dict[str, list] = {}
+        waiting_orders = []
+        for o in orders:
+            if o.status in (OrderStatus.CHARGING, OrderStatus.QUEUING):
+                if o.pile_id:
+                    pile_orders.setdefault(o.pile_id, []).append(o)
+            else:
+                waiting_orders.append(o)
+
+        for pile_id, pile_order_list in pile_orders.items():
+            pile = self._get_pile(pile_id)
+            if pile is None:
+                print(f"[Restore] 警告: 桩 {pile_id} 不存在，跳过 {len(pile_order_list)} 笔订单")
+                continue
+
+            # CHARGING 排前面，QUEUING 按 created_at 排序
+            charging = [o for o in pile_order_list if o.status == OrderStatus.CHARGING]
+            queuing = sorted(
+                [o for o in pile_order_list if o.status == OrderStatus.QUEUING],
+                key=lambda o: o.created_at or datetime.min)
+            sorted_orders = charging + queuing
+
+            for o in sorted_orders:
+                veh = vehicles.get(o.vehicle_id)
+                queue_item = {
+                    "vehicle_id": o.vehicle_id,
+                    "charge_type": o.charge_type,
+                    "requested_kwh": o.requested_kwh or 0.0,
+                    "charged_kwh": o.charged_kwh or 0.0,
+                    "order_id": o.id,
+                    "queue_number": o.queue_number or "",
+                    "user_id": o.user_id,
+                    "created_at": o.created_at,
+                    "battery_capacity_kwh": veh.battery_capacity_kwh if veh else self.battery_capacity,
+                    "current_vehicle_kwh": veh.current_kwh if veh else 0.0,
+                    "charge_start_time": o.charge_start_time,
+                }
+                pile.queue.append(queue_item)
+
+            if pile.queue:
+                pile.status = "CHARGING"
+                print(f"[Restore] 桩 {pile_id} 恢复 {len(pile.queue)} 辆车")
+
+        # 恢复等候区
+        for o in waiting_orders:
+            veh = vehicles.get(o.vehicle_id)
+            queue_item = {
+                "vehicle_id": o.vehicle_id,
+                "charge_type": o.charge_type,
+                "requested_kwh": o.requested_kwh or 0.0,
+                "charged_kwh": 0.0,
+                "order_id": o.id,
+                "queue_number": o.queue_number or "",
+                "user_id": o.user_id,
+                "created_at": o.created_at,
+                "battery_capacity_kwh": veh.battery_capacity_kwh if veh else self.battery_capacity,
+                "current_vehicle_kwh": veh.current_kwh if veh else 0.0,
+            }
+            if o.charge_type == "Fast":
+                self.fast_waiting.append(queue_item)
+            else:
+                self.slow_waiting.append(queue_item)
+
+        print(f"[Restore] 等候区恢复: Fast={len(self.fast_waiting)}, Slow={len(self.slow_waiting)}")
+
+        # 同步排队号计数器，避免重复
+        all_qns = [o.queue_number for o in orders if o.queue_number]
+        for qn in all_qns:
+            if qn.startswith("F"):
+                try:
+                    num = int(qn[1:])
+                    self.fast_counter = max(self.fast_counter, num)
+                except ValueError:
+                    pass
+            elif qn.startswith("T"):
+                try:
+                    num = int(qn[1:])
+                    self.slow_counter = max(self.slow_counter, num)
+                except ValueError:
+                    pass
+
+        print(f"[Restore] 排队号计数器: Fast={self.fast_counter}, Slow={self.slow_counter}")
+
     # ------------------------------------------------------------------
     #  查询方法
     # ------------------------------------------------------------------
