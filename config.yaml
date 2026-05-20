@@ -3,7 +3,7 @@ system:
   fast_pile_count: 3
   slow_pile_count: 2
   waiting_area_size: 10
-  pile_queue_length: 2
+  pile_queue_length: 3   # 每桩总车位数（1充电位+2排队位），验收标准值
   # 向后兼容旧键名
   fast_charging_piles: 3
   slow_charging_piles: 2
@@ -27,3 +27,12 @@ billing:
   peak_hours: [[10, 15], [18, 21]]
   flat_hours: [[7, 10], [15, 18], [21, 23]]
   valley_hours: [[23, 24], [0, 7]]
+
+# 动态优先级调度权重
+# P_i = alpha * (1 - SOC_i) + beta * W_type + gamma * ln(t_wait_i + 1)
+priority:
+  alpha: 0.5          # 低电量权重（SOC越低优先级越高）
+  beta: 0.3           # 充电模式权重
+  gamma: 0.2          # 等待时间权重
+  fast_type_weight: 1.0   # 快充模式 W_type
+  slow_type_weight: 0.5   # 慢充模式 W_type

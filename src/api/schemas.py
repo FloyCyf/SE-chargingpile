@@ -95,8 +95,15 @@ class PileQueueItemDetail(BaseModel):
     queue_number: Optional[str] = None
     requested_kwh: float
     charged_kwh: float = 0.0
+    current_fee: float = 0.0
+    current_power_fee: float = 0.0
+    current_service_fee: float = 0.0
+    charge_start_time: Optional[str] = None
     user_id: Optional[int] = None
     wait_duration_minutes: Optional[float] = None
+    priority_score: Optional[float] = None
+    soc: Optional[float] = None
+    wait_minutes: Optional[float] = None
 
 
 class PileStatus(BaseModel):
@@ -244,6 +251,9 @@ class WaitingCarDetail(BaseModel):
     requested_kwh: float
     user_id: Optional[int] = None
     waiting_since: Optional[datetime] = None
+    priority_score: Optional[float] = None
+    soc: Optional[float] = None
+    wait_minutes: Optional[float] = None
 
 
 class WaitingAreaResponse(BaseModel):

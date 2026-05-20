@@ -26,7 +26,19 @@ class VirtualClock:
         virtual_elapsed_minutes = real_elapsed_seconds * self.ratio
         return self.virtual_start_time + timedelta(minutes=virtual_elapsed_minutes)
         
+    def set_time(self, dt: datetime):
+        """将虚拟时间设定到指定时刻（重置基准点，倍率不变）"""
+        self.real_start_time = time.time()
+        self.virtual_start_time = dt
+
+    def set_ratio(self, ratio: float):
+        """修改时间推进倍率（先冻结当前虚拟时间，再以新倍率继续推进）"""
+        current_vtime = self.get_time()
+        self.real_start_time = time.time()
+        self.virtual_start_time = current_vtime
+        self.ratio = ratio
+
     def reset(self):
-        """如果需要强行重置系统沙盒时间刻度"""
+        """重置虚拟时间为当前真实时间（倍率不变）"""
         self.real_start_time = time.time()
         self.virtual_start_time = datetime.now()

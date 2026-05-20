@@ -1,4 +1,5 @@
 import asyncio
+import math
 import random
 import string
 from datetime import datetime
@@ -84,7 +85,7 @@ class SmartScheduler:
         self.waiting_capacity = config['system'].get(
             'waiting_area_size',
             config['system'].get('waiting_area_capacity', 10))
-        self.pile_queue_length = config['system'].get('pile_queue_length', 2)
+        self.pile_queue_length = config['system'].get('pile_queue_length', 3)
         self.fast_power = config.get('charging', {}).get('fast_power', 30.0)
         self.slow_power = config.get('charging', {}).get('slow_power', 10.0)
         self.battery_capacity = config.get('billing', {}).get(
@@ -124,6 +125,14 @@ class SmartScheduler:
         # 故障调度锁
         self.numbering_paused: bool = False
 
+        # 动态优先级权重 P_i = alpha*(1-SOC) + beta*W_type + gamma*ln(t_wait+1)
+        priority_cfg = config.get('priority', {})
+        self.priority_alpha: float = priority_cfg.get('alpha', 0.5)
+        self.priority_beta: float = priority_cfg.get('beta', 0.3)
+        self.priority_gamma: float = priority_cfg.get('gamma', 0.2)
+        self.priority_fast_weight: float = priority_cfg.get('fast_type_weight', 1.0)
+        self.priority_slow_weight: float = priority_cfg.get('slow_type_weight', 0.5)
+
     # ------------------------------------------------------------------
     #  排队号生成
     # ------------------------------------------------------------------
@@ -135,6 +144,55 @@ class SmartScheduler:
         else:
             self.slow_counter += 1
             return f"T{self.slow_counter}"
+
+    # ------------------------------------------------------------------
+    #  动态优先级计算
+    # ------------------------------------------------------------------
+
+    def calculate_priority(self, car: dict, current_vtime: datetime) -> float:
+        """
+        计算车辆动态优先级分数。
+        公式: P_i = alpha*(1-SOC_i) + beta*W_type + gamma*ln(t_wait_i+1)
+        - SOC_i  = current_kwh / battery_capacity_kwh  (0~1)
+        - W_type = fast_type_weight (Fast) / slow_type_weight (Slow)
+        - t_wait_i = 已等待分钟数
+        分数越高越优先。
+        """
+        battery_cap = car.get("battery_capacity_kwh", self.battery_capacity)
+        current_kwh = car.get("current_vehicle_kwh", 0.0)
+        soc = current_kwh / battery_cap if battery_cap > 0 else 0.0
+        soc = max(0.0, min(1.0, soc))
+
+        charge_type = car.get("charge_type", "Slow")
+        w_type = (self.priority_fast_weight if charge_type == "Fast"
+                  else self.priority_slow_weight)
+
+        created_at = car.get("created_at")
+        if created_at and isinstance(created_at, datetime):
+            wait_minutes = (current_vtime - created_at).total_seconds() / 60.0
+        else:
+            wait_minutes = 0.0
+        wait_minutes = max(0.0, wait_minutes)
+
+        score = (self.priority_alpha * (1.0 - soc)
+                 + self.priority_beta * w_type
+                 + self.priority_gamma * math.log(wait_minutes + 1.0))
+        return round(score, 6)
+
+    def _sorted_by_priority(self, waiting_list: List[dict],
+                            current_vtime: datetime) -> List[dict]:
+        """
+        将等候区列表按优先级降序排列（分数高者先调度）。
+        同分规则：等待时间长者优先 → 排队号更早者优先。
+        """
+        def sort_key(car):
+            score = self.calculate_priority(car, current_vtime)
+            created_at = car.get("created_at")
+            wait_sec = (current_vtime - created_at).total_seconds() if created_at else 0.0
+            qn_key = _queue_number_sort_key(car.get("queue_number", "Z999"))
+            # 分数降序(-score)，等待时间降序(-wait_sec)，排队号升序
+            return (-score, -wait_sec, qn_key)
+        return sorted(waiting_list, key=sort_key)
 
     # ------------------------------------------------------------------
     #  最短完成时间调度 — 选择最优桩
@@ -298,6 +356,7 @@ class SmartScheduler:
                     order.status = OrderStatus.CHARGING
                     order.started_at = vtime
                     order.charge_start_time = vtime
+                    queue_item["charge_start_time"] = vtime  # 内存保留，供实时计费
                 else:
                     order.status = OrderStatus.QUEUING
                 await session.commit()
@@ -450,6 +509,7 @@ class SmartScheduler:
         if len(pile.queue) > 0:
             next_car = pile.queue[0]
             next_car["charged_kwh"] = 0.0
+            next_car["charge_start_time"] = current_vtime  # 内存保留，供实时计费
             async with AsyncSessionLocal() as session:
                 next_order = await session.get(
                     ChargeOrder, next_car['order_id'])
@@ -474,35 +534,45 @@ class SmartScheduler:
 
     def _dispatch_from_waiting_area(self):
         """
-        将等候区的车辆按 FIFO 顺序分配到最优桩队列。
+        将等候区的车辆按动态优先级分数（降序）分配到最优桩队列。
         仅由 dispatch_watcher 后台任务或管理员手动触发。
         """
         if self.numbering_paused:
             return
 
+        current_vtime = self.clock.get_time()
+
         for charge_type, waiting_list in [
             ("Fast", self.fast_waiting),
             ("Slow", self.slow_waiting),
         ]:
-            dispatched_indices = []
-            for i, car in enumerate(waiting_list):
+            # 按优先级排序后尝试调度
+            sorted_cars = self._sorted_by_priority(waiting_list, current_vtime)
+            dispatched_order_ids = []
+            dispatched_updates = []
+
+            for car in sorted_cars:
                 optimal = self._find_optimal_pile(
                     charge_type, car["requested_kwh"])
                 if optimal is None:
-                    break  # 没有空位了
-                dispatched_indices.append((i, car, optimal))
-
-            # 逆序移除以避免索引偏移
-            for i, car, pile in reversed(dispatched_indices):
-                waiting_list.pop(i)
-                pile.queue.append(car)
-                is_first = len(pile.queue) == 1
-                old_status = pile.status
+                    continue  # 该车暂无空位，继续尝试下一辆（不 break）
+                dispatched_order_ids.append(car["order_id"])
+                optimal.queue.append(car)
+                is_first = len(optimal.queue) == 1
+                old_status = optimal.status
                 if is_first:
-                    pile.status = "CHARGING"
-                # 数据库更新在异步方法中完成
-                self._pending_db_updates.append(
-                    (pile, car, is_first, old_status))
+                    optimal.status = "CHARGING"
+                dispatched_updates.append(
+                    (optimal, car, is_first, old_status))
+
+            # 从等候区移除已调度的车辆
+            if dispatched_order_ids:
+                dispatched_set = set(dispatched_order_ids)
+                waiting_list[:] = [
+                    c for c in waiting_list
+                    if c["order_id"] not in dispatched_set
+                ]
+                self._pending_db_updates.extend(dispatched_updates)
 
     async def dispatch_from_waiting_area_async(self):
         """异步版本：调度 + DB 更新"""
@@ -519,6 +589,7 @@ class SmartScheduler:
                         order.status = OrderStatus.CHARGING
                         order.started_at = current_vtime
                         order.charge_start_time = current_vtime
+                        car["charge_start_time"] = current_vtime  # 内存保留，供实时计费
                     else:
                         order.status = OrderStatus.QUEUING
                     await session.commit()
@@ -915,10 +986,29 @@ class SmartScheduler:
         return None
 
     def get_system_status(self) -> dict:
+        current_vtime = self.clock.get_time()
         piles_data = []
         for p in self.piles:
             queue_items = []
             for i, car in enumerate(p.queue):
+                current_fee = 0.0
+                current_power_fee = 0.0
+                current_service_fee = 0.0
+                charge_start_str = None
+
+                if i == 0 and p.status == "CHARGING":
+                    charge_start = car.get("charge_start_time")
+                    charged_kwh = car.get("charged_kwh", 0.0)
+                    if charge_start and charged_kwh > 0:
+                        fee_r = calculate_fee(
+                            charge_start, current_vtime, charged_kwh)
+                        current_fee = fee_r["total_fee"]
+                        current_power_fee = fee_r["power_fee"]
+                        current_service_fee = fee_r["service_fee"]
+                    if charge_start:
+                        charge_start_str = charge_start.strftime(
+                            "%Y-%m-%d %H:%M:%S")
+
                 queue_items.append({
                     "position": i,
                     "order_id": car["order_id"],
@@ -926,8 +1016,21 @@ class SmartScheduler:
                     "queue_number": car.get("queue_number"),
                     "requested_kwh": car["requested_kwh"],
                     "charged_kwh": car.get("charged_kwh", 0.0),
+                    "current_fee": current_fee,
+                    "current_power_fee": current_power_fee,
+                    "current_service_fee": current_service_fee,
+                    "charge_start_time": charge_start_str,
                     "user_id": car.get("user_id"),
                     "wait_duration_minutes": None,
+                    "priority_score": round(
+                        self.calculate_priority(car, current_vtime), 4),
+                    "soc": round(
+                        car.get("current_vehicle_kwh", 0.0)
+                        / max(car.get("battery_capacity_kwh",
+                                      self.battery_capacity), 1e-9), 4),
+                    "wait_minutes": round(
+                        (current_vtime - car["created_at"]).total_seconds() / 60.0
+                        if car.get("created_at") else 0.0, 2),
                 })
             piles_data.append({
                 "pile_id": p.pile_id,
@@ -984,30 +1087,40 @@ class SmartScheduler:
         return None
 
     def get_waiting_area(self) -> dict:
-        """获取等候区车辆信息"""
-        fast_list = []
-        for item in self.fast_waiting:
-            fast_list.append({
+        """获取等候区车辆信息（按优先级降序排列）"""
+        current_vtime = self.clock.get_time()
+
+        def _build_item(item, charge_type):
+            battery_cap = item.get("battery_capacity_kwh", self.battery_capacity)
+            current_kwh = item.get("current_vehicle_kwh", 0.0)
+            soc = current_kwh / max(battery_cap, 1e-9)
+            created_at = item.get("created_at")
+            wait_min = (
+                (current_vtime - created_at).total_seconds() / 60.0
+                if created_at else 0.0
+            )
+            return {
                 "order_id": item["order_id"],
                 "vehicle_id": item["vehicle_id"],
                 "queue_number": item.get("queue_number", ""),
-                "charge_type": "Fast",
+                "charge_type": charge_type,
                 "requested_kwh": item["requested_kwh"],
                 "user_id": item.get("user_id"),
-                "waiting_since": item.get("created_at"),
-            })
-        slow_list = []
-        for item in self.slow_waiting:
-            slow_list.append({
-                "order_id": item["order_id"],
-                "vehicle_id": item["vehicle_id"],
-                "queue_number": item.get("queue_number", ""),
-                "charge_type": "Slow",
-                "requested_kwh": item["requested_kwh"],
-                "user_id": item.get("user_id"),
-                "waiting_since": item.get("created_at"),
-            })
-        return {"fast_waiting": fast_list, "slow_waiting": slow_list}
+                "waiting_since": created_at,
+                "priority_score": round(
+                    self.calculate_priority(item, current_vtime), 4),
+                "soc": round(max(0.0, min(1.0, soc)), 4),
+                "wait_minutes": round(max(0.0, wait_min), 2),
+            }
+
+        # 按优先级降序输出（仅展示，不修改内部 waiting_list）
+        sorted_fast = self._sorted_by_priority(self.fast_waiting, current_vtime)
+        sorted_slow = self._sorted_by_priority(self.slow_waiting, current_vtime)
+
+        return {
+            "fast_waiting": [_build_item(i, "Fast") for i in sorted_fast],
+            "slow_waiting": [_build_item(i, "Slow") for i in sorted_slow],
+        }
 
     # ------------------------------------------------------------------
     #  内部工具

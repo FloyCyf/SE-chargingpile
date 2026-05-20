@@ -464,3 +464,144 @@ async def export_bill_details_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=bill_details.csv"},
     )
+
+
+# ---- 虚拟时钟管理 ----
+
+class ClockSetBody(BaseModel):
+    datetime: Optional[str] = None   # "YYYY-MM-DD HH:MM:SS" 或 "HH:MM:SS"（今日日期）
+    ratio: Optional[float] = None    # 时间推进倍率
+
+
+@router.get("/clock")
+async def get_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """获取当前虚拟时间和倍率"""
+    clock = request.app.state.scheduler.clock
+    return {
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+        "description": f"每真实1秒 = 虚拟{clock.ratio}分钟",
+    }
+
+
+@router.put("/clock")
+async def set_clock(
+    body: ClockSetBody,
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """设置虚拟时间或倍率（可单独设置其中一项）"""
+    clock = request.app.state.scheduler.clock
+    changed = []
+
+    if body.datetime is not None:
+        dt_str = body.datetime.strip()
+        # 支持 "HH:MM:SS" 或 "HH:MM" 格式（自动补今日日期）
+        if len(dt_str) <= 8:
+            from datetime import date as _date
+            today = _date.today().strftime("%Y-%m-%d")
+            dt_str = f"{today} {dt_str}"
+        new_dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                new_dt = datetime.strptime(dt_str, fmt)
+                break
+            except ValueError:
+                continue
+        if new_dt is None:
+            raise HTTPException(
+                status_code=400,
+                detail="时间格式错误，支持 HH:MM:SS 或 YYYY-MM-DD HH:MM:SS")
+        clock.set_time(new_dt)
+        changed.append(f"虚拟时间设为 {new_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if body.ratio is not None:
+        if body.ratio <= 0:
+            raise HTTPException(status_code=400, detail="倍率必须大于0")
+        clock.set_ratio(body.ratio)
+        changed.append(f"倍率设为 {body.ratio}（每真实1秒=虚拟{body.ratio}分钟）")
+
+    if not changed:
+        raise HTTPException(status_code=400, detail="请提供 datetime 或 ratio 字段")
+
+    return {
+        "status": "success",
+        "changed": changed,
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+    }
+
+
+@router.post("/clock/reset")
+async def reset_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """重置虚拟时间为当前真实时间（倍率不变）"""
+    clock = request.app.state.scheduler.clock
+    clock.reset()
+    return {
+        "status": "success",
+        "message": "虚拟时间已重置为当前真实时间",
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+    }
+
+
+# ---- 验收快照 ----
+
+@router.get("/acceptance/snapshot")
+async def acceptance_snapshot(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """
+    验收快照：按验收 Excel 结构返回当前全站状态。
+    返回每个桩的队列车辆（含当前费用）和等候区车辆。
+    """
+    scheduler = request.app.state.scheduler
+    status = scheduler.get_system_status()
+    waiting = scheduler.get_waiting_area()
+
+    fast_piles = {}
+    slow_piles = {}
+    for p in status["piles"]:
+        pile_info = {
+            "pile_id": p["pile_id"],
+            "type": p["type"],
+            "status": p["status"],
+            "power": p["power"],
+            "queue": [
+                {
+                    "position": qi["position"],
+                    "vehicle_id": qi["vehicle_id"],
+                    "queue_number": qi["queue_number"],
+                    "requested_kwh": qi["requested_kwh"],
+                    "charged_kwh": qi["charged_kwh"],
+                    "current_fee": qi.get("current_fee", 0.0),
+                    "current_power_fee": qi.get("current_power_fee", 0.0),
+                    "current_service_fee": qi.get("current_service_fee", 0.0),
+                    "charge_start_time": qi.get("charge_start_time"),
+                }
+                for qi in p["queue_items"]
+            ],
+        }
+        if p["type"] == "Fast":
+            fast_piles[p["pile_id"]] = pile_info
+        else:
+            slow_piles[p["pile_id"]] = pile_info
+
+    return {
+        "current_virtual_time": scheduler.clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "fast_piles": fast_piles,
+        "slow_piles": slow_piles,
+        "waiting_area": {
+            "fast_waiting": waiting["fast_waiting"],
+            "slow_waiting": waiting["slow_waiting"],
+            "fast_count": len(waiting["fast_waiting"]),
+            "slow_count": len(waiting["slow_waiting"]),
+        },
+    }
