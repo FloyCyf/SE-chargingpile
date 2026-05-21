@@ -40,7 +40,8 @@ async def control_pile(
     elif action == "stop":
         result = await scheduler.stop_pile(pile_id)
     elif action == "fault":
-        result = await scheduler.fault_pile(pile_id)
+        result = await scheduler.fault_pile(
+            pile_id, duration_minutes=body.duration_minutes)
     elif action == "recover":
         result = await scheduler.recover_pile(pile_id)
     else:

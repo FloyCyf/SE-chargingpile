@@ -117,6 +117,9 @@ class SmartScheduler:
         # 等候区（两个全局 FIFO 列表）
         self.fast_waiting: List[dict] = []
         self.slow_waiting: List[dict] = []
+        self.fast_fault_waiting: List[dict] = []
+        self.slow_fault_waiting: List[dict] = []
+        self.fault_recover_tasks: dict[str, asyncio.Task] = {}
 
         # 排队号计数器
         self.fast_counter: int = 0
@@ -144,6 +147,13 @@ class SmartScheduler:
         else:
             self.slow_counter += 1
             return f"T{self.slow_counter}"
+
+    def _fault_waiting_for_type(self, charge_type: str) -> List[dict]:
+        return (self.fast_fault_waiting if charge_type == "Fast"
+                else self.slow_fault_waiting)
+
+    def _has_fault_waiting(self) -> bool:
+        return bool(self.fast_fault_waiting or self.slow_fault_waiting)
 
     # ------------------------------------------------------------------
     #  动态优先级计算
@@ -231,7 +241,10 @@ class SmartScheduler:
         async with self.lock:
             # 容量检查: 所有桩队列中的车 + 等候区中的车
             cars_in_piles = sum(len(p.queue) for p in self.piles)
-            cars_in_waiting = len(self.fast_waiting) + len(self.slow_waiting)
+            cars_in_waiting = (
+                len(self.fast_waiting) + len(self.slow_waiting)
+                + len(self.fast_fault_waiting) + len(self.slow_fault_waiting)
+            )
             total_cars = cars_in_piles + cars_in_waiting
 
             if total_cars >= self.waiting_capacity:
@@ -240,6 +253,7 @@ class SmartScheduler:
                         "queue_position": None, "assigned_pile": None}
 
             current_vtime = self.clock.get_time()
+
             queue_number = self._next_queue_number(request.charge_type)
 
             # 查询车辆电池容量，限制充电量不超过最大可充量
@@ -294,8 +308,10 @@ class SmartScheduler:
             }
 
             # 尝试直接分配到最优桩队列
-            optimal_pile = self._find_optimal_pile(
-                request.charge_type, actual_requested)
+            optimal_pile = None
+            if not self._has_fault_waiting():
+                optimal_pile = self._find_optimal_pile(
+                    request.charge_type, actual_requested)
 
             if optimal_pile is not None:
                 await self._assign_to_pile_queue(
@@ -537,7 +553,7 @@ class SmartScheduler:
         将等候区的车辆按动态优先级分数（降序）分配到最优桩队列。
         仅由 dispatch_watcher 后台任务或管理员手动触发。
         """
-        if self.numbering_paused:
+        if self.numbering_paused or self._has_fault_waiting():
             return
 
         current_vtime = self.clock.get_time()
@@ -547,7 +563,7 @@ class SmartScheduler:
             ("Slow", self.slow_waiting),
         ]:
             # 按优先级排序后尝试调度
-            sorted_cars = self._sorted_by_priority(waiting_list, current_vtime)
+            sorted_cars = list(waiting_list)
             dispatched_order_ids = []
             dispatched_updates = []
 
@@ -574,8 +590,36 @@ class SmartScheduler:
                 ]
                 self._pending_db_updates.extend(dispatched_updates)
 
+    async def _dispatch_fault_waiting_async(self):
+        self.numbering_paused = self._has_fault_waiting()
+        current_vtime = self.clock.get_time()
+
+        for charge_type in ["Fast", "Slow"]:
+            fault_queue = self._fault_waiting_for_type(charge_type)
+            if not fault_queue:
+                continue
+
+            remaining = []
+            for car in list(fault_queue):
+                optimal = self._find_optimal_pile(
+                    charge_type, car["requested_kwh"])
+                if optimal is None:
+                    remaining.append(car)
+                    continue
+                car["charged_kwh"] = 0.0
+                await self._assign_to_pile_queue(
+                    optimal, car, current_vtime)
+
+            fault_queue[:] = remaining
+
+        self.numbering_paused = self._has_fault_waiting()
+
     async def dispatch_from_waiting_area_async(self):
         """异步版本：调度 + DB 更新"""
+        await self._dispatch_fault_waiting_async()
+        if self._has_fault_waiting():
+            return
+
         self._pending_db_updates: list = []
         self._dispatch_from_waiting_area()
 
@@ -615,7 +659,10 @@ class SmartScheduler:
             current_vtime = self.clock.get_time()
 
             # 1. 检查等候区
-            for waiting_list in [self.fast_waiting, self.slow_waiting]:
+            for waiting_list in [
+                self.fast_waiting, self.slow_waiting,
+                self.fast_fault_waiting, self.slow_fault_waiting,
+            ]:
                 for i, item in enumerate(waiting_list):
                     if item['order_id'] == order_id:
                         waiting_list.pop(i)
@@ -774,7 +821,8 @@ class SmartScheduler:
     #  故障处理
     # ------------------------------------------------------------------
 
-    async def fault_pile(self, pile_id: str) -> dict:
+    async def fault_pile(self, pile_id: str,
+                         duration_minutes: Optional[float] = None) -> dict:
         """将充电桩置为故障状态，处理正在充电和排队的车辆"""
         async with self.lock:
             pile = self._get_pile(pile_id)
@@ -801,14 +849,39 @@ class SmartScheduler:
                 reason="管理员设置故障", operator="admin")
 
             # 优先级调度：将故障队列车辆优先分配到同类型其他桩
+            fault_queue = self._fault_waiting_for_type(pile.type)
+            displaced_cars.sort(key=lambda c: _queue_number_sort_key(
+                c.get('queue_number', 'Z999')))
+            fault_queue.extend(displaced_cars)
+            self.numbering_paused = self._has_fault_waiting()
+
             if displaced_cars:
-                await self._priority_dispatch(
-                    displaced_cars, pile.type, current_vtime)
+                await self._dispatch_fault_waiting_async()
+
+            if duration_minutes is not None and duration_minutes > 0:
+                self._schedule_auto_recover(pile_id, float(duration_minutes))
 
             return {"status": "success",
                     "message": f"充电桩 {pile_id} 已置为故障，"
                                f"已调度 {len(displaced_cars)} 辆车",
                     "pile_id": pile_id}
+
+    def _schedule_auto_recover(self, pile_id: str, duration_minutes: float):
+        old_task = self.fault_recover_tasks.pop(pile_id, None)
+        if old_task and not old_task.done():
+            old_task.cancel()
+        self.fault_recover_tasks[pile_id] = asyncio.create_task(
+            self._auto_recover_after(pile_id, duration_minutes)
+        )
+
+    async def _auto_recover_after(self, pile_id: str, duration_minutes: float):
+        real_seconds = max(
+            0.0, duration_minutes * 60.0 / max(self.clock.ratio, 1e-9))
+        try:
+            await asyncio.sleep(real_seconds)
+            await self.recover_pile(pile_id)
+        finally:
+            self.fault_recover_tasks.pop(pile_id, None)
 
     async def _priority_dispatch(self, displaced_cars: List[dict],
                                  charge_type: str, current_vtime):
@@ -843,34 +916,38 @@ class SmartScheduler:
         self.numbering_paused = False
 
     async def recover_pile(self, pile_id: str) -> dict:
-        """充电桩故障恢复"""
         async with self.lock:
             pile = self._get_pile(pile_id)
             if pile is None:
-                return {"status": "failed", "message": "充电桩不存在"}
+                return {"status": "failed", "message": "charging pile not found"}
             if pile.status != "FAULT":
-                return {"status": "failed", "message": "充电桩不处于故障状态"}
+                return {"status": "failed", "message": "charging pile is not faulted"}
 
             pile.status = "IDLE"
+            task = self.fault_recover_tasks.pop(pile_id, None)
+            if task and task is not asyncio.current_task() and not task.done():
+                task.cancel()
             await self._log_pile_status(
                 pile.pile_id, "FAULT", "IDLE",
-                reason="管理员恢复故障", operator="admin")
+                reason="admin recovered fault", operator="admin")
             current_vtime = self.clock.get_time()
 
-            # 如果同类型桩仍有排队车辆，进行时间顺序重新调度
+            if self._has_fault_waiting():
+                await self._dispatch_fault_waiting_async()
+                if self._has_fault_waiting():
+                    return {"status": "success",
+                            "message": f"pile {pile_id} recovered",
+                            "pile_id": pile_id}
+
             same_type_piles = [
                 p for p in self.piles
                 if p.type == pile.type and p.pile_id != pile_id
             ]
-            has_queued = any(
-                len(p.queue) > 1 for p in same_type_piles)
-
-            if has_queued:
-                await self._time_order_dispatch(
-                    pile.type, current_vtime)
+            if any(len(p.queue) > 1 for p in same_type_piles):
+                await self._time_order_dispatch(pile.type, current_vtime)
 
             return {"status": "success",
-                    "message": f"充电桩 {pile_id} 已恢复",
+                    "message": f"pile {pile_id} recovered",
                     "pile_id": pile_id}
 
     async def _time_order_dispatch(self, charge_type: str,

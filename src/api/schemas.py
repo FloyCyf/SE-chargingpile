@@ -213,6 +213,8 @@ class StopResponse(BaseModel):
 
 class PileControlRequest(BaseModel):
     action: str = Field(..., description="start / stop / fault")
+    duration_minutes: Optional[float] = Field(
+        None, gt=0, description="fault duration in virtual minutes")
 
 
 class PileControlResponse(BaseModel):

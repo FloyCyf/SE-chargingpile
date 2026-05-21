@@ -383,7 +383,13 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- 充电区 -->
                 <div class="lg:col-span-2 card bg-white rounded-lg p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">⚡ 充电区</h2>
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                        <h2 class="text-lg font-semibold text-gray-800">充电桩实时控制</h2>
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                            <label for="fault-duration-minutes" class="text-gray-500 whitespace-nowrap">故障持续时间(分钟)</label>
+                            <input id="fault-duration-minutes" type="number" min="1" step="1" value="30" class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
 
                     <!-- 快充桩 -->
                     <div class="mb-6">
@@ -507,6 +513,32 @@
         <!-- 系统设置面板 -->
         <div id="settings-panel" class="card bg-white rounded-lg p-6" style="display: none;">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">⚙️ 系统设置</h2>
+
+            <div class="border border-blue-100 bg-blue-50 rounded-lg p-4 mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+                    <div class="flex-1">
+                        <h3 class="text-base font-semibold text-gray-800 mb-2">虚拟时间控制</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                            <div>
+                                <div class="text-gray-500 mb-1">当前虚拟时间</div>
+                                <div id="clock-current-time" class="font-semibold text-blue-700">--</div>
+                            </div>
+                            <div>
+                                <label for="clock-time-input" class="block text-gray-500 mb-1">设置时间</label>
+                                <input id="clock-time-input" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="clock-ratio-input" class="block text-gray-500 mb-1">时间倍率</label>
+                                <input id="clock-ratio-input" type="number" min="0.1" step="0.1" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="saveClock()" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">应用</button>
+                        <button onclick="resetClock()" class="btn-secondary px-4 py-2 text-white rounded-lg text-sm">重置</button>
+                    </div>
+                </div>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -652,16 +684,13 @@
             </div>
 
             <!-- 导出按钮行 -->
-            <div class="flex gap-3 mb-4">
-                <button onclick="exportCSV('orders')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
-                    导出订单 CSV
-                </button>
-                <button onclick="exportCSV('bills')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
-                    导出账单 CSV
-                </button>
-                <button onclick="exportCSV('bill-details')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
-                    导出详单 CSV
-                </button>
+            <div class="flex flex-wrap gap-3 mb-4">
+                <button onclick="exportFile('orders', 'csv')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">导出订单 CSV</button>
+                <button onclick="exportFile('bills', 'csv')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">导出账单 CSV</button>
+                <button onclick="exportFile('bill-details', 'csv')" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">导出详单 CSV</button>
+                <button onclick="exportFile('orders', 'xlsx')" class="btn-success px-4 py-2 text-white rounded-lg text-sm">导出订单 Excel</button>
+                <button onclick="exportFile('bills', 'xlsx')" class="btn-success px-4 py-2 text-white rounded-lg text-sm">导出账单 Excel</button>
+                <button onclick="exportFile('bill-details', 'xlsx')" class="btn-success px-4 py-2 text-white rounded-lg text-sm">导出详单 Excel</button>
             </div>
 
             <!-- 订单子面板 -->
@@ -860,6 +889,125 @@
                 settingsTab.classList.add('tab-active');
                 settingsPanel.style.display = 'block';
                 loadBillingConfig();
+                loadClock(false);
+            }
+        }
+
+        function adminHeaders(extra = {}) {
+            const token = localStorage.getItem('admin_token') || '';
+            return Object.assign({ 'Authorization': 'Bearer ' + token }, extra);
+        }
+
+        function toDateTimeLocal(value) {
+            if (!value) return '';
+            const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T');
+            const date = new Date(normalized);
+            if (Number.isNaN(date.getTime())) return '';
+            const pad = n => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        async function loadClock(showToast = false) {
+            try {
+                const res = await fetch('/api/admin/clock', { headers: adminHeaders() });
+                if (!res.ok) return;
+                const data = await res.json();
+                const time = data.current_virtual_time || data.datetime || data.time;
+                const ratio = data.ratio ?? 1;
+                const timeEl = document.getElementById('clock-current-time');
+                const inputEl = document.getElementById('clock-time-input');
+                const ratioEl = document.getElementById('clock-ratio-input');
+                if (timeEl) timeEl.innerText = time || '--';
+                if (inputEl && time && !inputEl.matches(':focus')) inputEl.value = toDateTimeLocal(time);
+                if (ratioEl && !ratioEl.matches(':focus')) ratioEl.value = ratio;
+                if (showToast) showNotification('虚拟时间已刷新', 'success');
+            } catch (e) {
+                console.error('Load clock failed:', e);
+            }
+        }
+
+        async function saveClock() {
+            const timeValue = document.getElementById('clock-time-input')?.value;
+            const ratioValue = Number(document.getElementById('clock-ratio-input')?.value || 1);
+            const payload = { ratio: ratioValue };
+            if (timeValue) payload.datetime = timeValue.replace('T', ' ');
+            try {
+                const res = await fetch('/api/admin/clock', {
+                    method: 'PUT',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || data.message || '设置虚拟时间失败');
+                showNotification(data.message || '虚拟时间已更新', 'success');
+                await loadClock(false);
+                await poll();
+            } catch (e) {
+                showNotification(e.message, 'error');
+            }
+        }
+
+        async function resetClock() {
+            try {
+                const res = await fetch('/api/admin/clock/reset', { method: 'POST', headers: adminHeaders() });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || data.message || '重置虚拟时间失败');
+                showNotification(data.message || '虚拟时间已重置', 'success');
+                await loadClock(false);
+                await poll();
+            } catch (e) {
+                showNotification(e.message, 'error');
+            }
+        }
+
+        function renderSnapshotPile(pileId, pile) {
+            const queue = pile?.queue || [];
+            const status = pile?.status || 'IDLE';
+            const rows = queue.length ? queue.map(item => `
+                <div class="flex justify-between gap-3 text-xs text-gray-600 border-t border-gray-100 pt-2 mt-2">
+                    <span>${item.position || ''}. ${item.vehicle_id || '-'}</span>
+                    <span>已充 ${formatKwh(item.charged_kwh)} / ${formatKwh(item.requested_kwh)} kWh</span>
+                    <span>¥${Number(item.current_fee || 0).toFixed(2)}</span>
+                </div>
+            `).join('') : '<div class="text-xs text-gray-400 border-t border-gray-100 pt-2 mt-2">暂无车辆</div>';
+            return `
+                <div class="border border-gray-200 rounded-lg p-3">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-800">${pileId}</span>
+                        <span class="badge ${statusBadgeClass(status)}">${statusLabel(status)}</span>
+                    </div>
+                    ${rows}
+                </div>
+            `;
+        }
+
+        async function loadAcceptanceSnapshot(showToast = false) {
+            const box = document.getElementById('acceptance-snapshot');
+            if (!box) return;
+            try {
+                const res = await fetch('/api/admin/acceptance/snapshot', { headers: adminHeaders() });
+                if (!res.ok) return;
+                const data = await res.json();
+                const fastIds = ['F1', 'F2', 'F3'];
+                const slowIds = ['T1', 'T2'];
+                const fastWaiting = data.waiting_area?.fast_waiting || data.fast_waiting || [];
+                const slowWaiting = data.waiting_area?.slow_waiting || data.slow_waiting || [];
+                const waitingRows = [...fastWaiting.map((v, i) => ({...v, mode: '快充', index: i + 1})), ...slowWaiting.map((v, i) => ({...v, mode: '慢充', index: i + 1}))]
+                    .map(v => `<div class="text-xs text-gray-600">${v.mode} ${v.index}. ${v.vehicle_id || '-'}，请求 ${formatKwh(v.requested_kwh || v.requested_capacity)} kWh，已充 ${formatKwh(v.charged_kwh)} kWh，费用 ¥${Number(v.current_fee || 0).toFixed(2)}</div>`)
+                    .join('') || '<div class="text-xs text-gray-400">等待区为空</div>';
+                box.innerHTML = `
+                    <div class="text-sm text-gray-500">虚拟时间：${data.current_virtual_time || data.current_time || '--'}</div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">${fastIds.map(id => renderSnapshotPile(id, data.fast_piles?.[id] || {})).join('')}</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">${slowIds.map(id => renderSnapshotPile(id, data.slow_piles?.[id] || {})).join('')}</div>
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <div class="font-semibold text-gray-800 mb-2">等待区 FIFO</div>
+                        <div class="space-y-1">${waitingRows}</div>
+                    </div>
+                `;
+                if (showToast) showNotification('验收快照已刷新', 'success');
+            } catch (e) {
+                console.error('Acceptance snapshot failed:', e);
+                if (showToast) showNotification('验收快照刷新失败', 'error');
             }
         }
 
@@ -888,6 +1036,7 @@
                 updateStats(data);
                 updatePiles(data.piles);
                 updateQueues(data.fast_queue, data.slow_queue);
+                loadAcceptanceSnapshot(false);
             } catch (e) {
                 console.error('Polling error:', e);
             }
@@ -916,167 +1065,112 @@
             document.getElementById('slow-available-count').innerText = slowAvailable;
         }
 
+        function statusLabel(status) {
+            const map = { CHARGING: '充电中', FAULT: '故障中', IDLE: '空闲' };
+            return map[status] || status || '未知';
+        }
+
+        function statusBadgeClass(status) {
+            if (status === 'CHARGING') return 'badge-charging';
+            if (status === 'FAULT') return 'badge-fault';
+            return 'bg-gray-100 text-gray-600';
+        }
+
+        function formatKwh(value) {
+            const num = Number(value || 0);
+            return Number.isFinite(num) ? num.toFixed(2) : '0.00';
+        }
+
+        function renderPileCard(p) {
+            const isCharging = p.status === 'CHARGING';
+            const isFault = p.status === 'FAULT';
+            const socPercent = isCharging ? Math.min(100, Math.floor(Number(p.current_soc || 0) * 100)) : 0;
+            const targetPercent = Math.floor(Number(p.target_soc || 0) * 100);
+            const power = p.power || (p.type === 'Fast' ? 30 : 10);
+
+            return `
+                <div id="pile-${p.pile_id}" class="pile-card ${isCharging ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
+                        <span class="badge ${statusBadgeClass(p.status)}">${statusLabel(p.status)}</span>
+                    </div>
+                    ${isCharging ? `
+                        <div class="text-sm text-gray-600 mb-2">当前车辆：${p.vehicle_id || '-'}</div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-gray-400">充电进度</span>
+                                <span class="text-blue-600">${socPercent}% / ${targetPercent}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-400">功率：${power} kW</div>
+                        <button onclick="faultPile('${p.pile_id}')" class="btn-danger w-full mt-3 py-2 text-xs text-white rounded-lg">设为故障</button>
+                    ` : isFault ? `
+                        <div class="text-sm text-red-500">故障中，等待恢复或持续时间结束后自动恢复。</div>
+                        <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">恢复充电桩</button>
+                    ` : `
+                        <div class="text-sm text-gray-400">当前空闲，可接收调度。</div>
+                        <button onclick="faultPile('${p.pile_id}')" class="btn-danger w-full mt-3 py-2 text-xs text-white rounded-lg">设为故障</button>
+                    `}
+                </div>
+            `;
+        }
+
         function updatePiles(piles) {
             const fastPiles = piles.filter(p => p.type === 'Fast');
             const slowPiles = piles.filter(p => p.type === 'Slow');
+            document.getElementById('fast-piles').innerHTML = fastPiles.map(renderPileCard).join('') || '<div class="text-gray-400 text-sm">暂无快充桩</div>';
+            document.getElementById('slow-piles').innerHTML = slowPiles.map(renderPileCard).join('') || '<div class="text-gray-400 text-sm">暂无慢充桩</div>';
+        }
 
-            let fastHtml = '';
-            fastPiles.forEach(p => {
-                const isC = p.status === 'CHARGING';
-                const isFault = p.status === 'FAULT';
-                const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
-
-                fastHtml += `
-                    <div id="pile-${p.pile_id}" class="pile-card ${isC ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
-                            <span class="badge ${isC ? 'badge-charging' : isFault ? 'badge-fault' : 'bg-gray-100 text-gray-600'}">
-                                ${isC ? '🟢 充电中' : isFault ? '🔴 故障' : '⚪ 空闲'}
-                            </span>
-                        </div>
-                        ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
-                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
-                            </div>
-                            <div class="mb-2">
-                                <div class="flex justify-between text-xs mb-1">
-                                    <span class="text-gray-400">充电进度</span>
-                                    <span class="text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</span>
-                                </div>
-                                <div class="w-full bg-gray-200 rounded-full h-2">
-                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
-                                </div>
-                            </div>
-                            <div class="text-xs text-gray-400">当前运行功率: ${p.power}度/小时</div>
-                        ` : isFault ? `
-                            <div class="text-sm text-red-500">设备故障，等待维修</div>
-                            <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">
-                                重置故障
-                            </button>
-                        ` : `
-                            <div class="text-sm text-gray-400">接口空闲</div>
-                            <button onclick="startPile('${p.pile_id}')" class="btn-primary w-full mt-3 py-2 text-xs text-white rounded-lg">
-                                启动充电桩
-                            </button>
-                        `}
+        function renderQueueCard(q, type, index) {
+            const modeLabel = type === 'Fast' ? '快充' : '慢充';
+            const queueNo = q.queue_num || q.queue_number || `${type === 'Fast' ? 'F' : 'T'}${index + 1}`;
+            return `
+                <div class="queue-card hover:border-blue-300 transition-colors">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-800">${q.vehicle_id || '-'}</span>
+                        <span class="${type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${queueNo}</span>
                     </div>
-                `;
-            });
-            document.getElementById('fast-piles').innerHTML = fastHtml || '<div class="text-gray-400 text-sm">暂无快充桩</div>';
-
-            let slowHtml = '';
-            slowPiles.forEach(p => {
-                const isC = p.status === 'CHARGING';
-                const isFault = p.status === 'FAULT';
-                const socPercent = isC ? Math.min(100, Math.floor(p.current_soc * 100)) : 0;
-
-                slowHtml += `
-                    <div id="pile-${p.pile_id}" class="pile-card ${isC ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
-                            <span class="badge ${isC ? 'badge-charging' : isFault ? 'badge-fault' : 'bg-gray-100 text-gray-600'}">
-                                ${isC ? '🟢 充电中' : isFault ? '🔴 故障' : '⚪ 空闲'}
-                            </span>
-                        </div>
-                        ${isC ? `
-                            <div class="text-sm text-gray-600 mb-2">车辆: ${p.vehicle_id}
-                                <span style="background:rgba(102,126,234,0.2);color:#667eea;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600;margin-left:6px">充电区</span>
-                            </div>
-                            <div class="mb-2">
-                                <div class="flex justify-between text-xs mb-1">
-                                    <span class="text-gray-400">充电进度</span>
-                                    <span class="text-blue-600">${socPercent}% → ${Math.floor(p.target_soc * 100)}%</span>
-                                </div>
-                                <div class="w-full bg-gray-200 rounded-full h-2">
-                                    <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
-                                </div>
-                            </div>
-                            <div class="text-xs text-gray-400">当前运行功率: ${p.power}度/小时</div>
-                        ` : isFault ? `
-                            <div class="text-sm text-red-500">设备故障，等待维修</div>
-                            <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">
-                                重置故障
-                            </button>
-                        ` : `
-                            <div class="text-sm text-gray-400">接口空闲</div>
-                            <button onclick="startPile('${p.pile_id}')" class="btn-primary w-full mt-3 py-2 text-xs text-white rounded-lg">
-                                启动充电桩
-                            </button>
-                        `}
+                    <div class="text-xs mt-1">
+                        <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">${modeLabel} FIFO 等候</span>
                     </div>
-                `;
-            });
-            document.getElementById('slow-piles').innerHTML = slowHtml || '<div class="text-gray-400 text-sm">暂无慢充桩</div>';
+                    <div class="text-xs text-gray-400 mt-1">
+                        请求电量：${formatKwh(q.requested_capacity || q.requested_kwh)} kWh | 等待：${formatDuration(q.queue_duration)}
+                    </div>
+                    <button onclick="removeFromQueue('${q.vehicle_id}')" class="btn-danger w-full mt-2 py-1 text-xs text-white rounded-lg">移出队列</button>
+                </div>
+            `;
         }
 
         function updateQueues(fastQueue, slowQueue) {
-            let fastHtml = '';
-            fastQueue.forEach((q, i) => {
-                fastHtml += `
-                    <div class="queue-card hover:border-blue-300 transition-colors">
-                        <div class="flex justify-between items-center">
-                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
-                            <span class="badge badge-fast">F${i + 1}</span>
-                        </div>
-                        <div class="text-xs mt-1">
-                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
-                        </div>
-                        <div class="text-xs text-gray-400 mt-1">
-                            电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
-                        </div>
-                        <button onclick="removeFromQueue('${q.vehicle_id}')" class="btn-danger w-full mt-2 py-1 text-xs text-white rounded-lg">
-                            移除
-                        </button>
-                    </div>
-                `;
-            });
-            document.getElementById('fast-queue').innerHTML = fastHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+            const fastHtml = fastQueue.map((q, i) => renderQueueCard(q, 'Fast', i)).join('');
+            const slowHtml = slowQueue.map((q, i) => renderQueueCard(q, 'Slow', i)).join('');
+            document.getElementById('fast-queue').innerHTML = fastHtml || '<div class="text-gray-400 text-sm">快充等待区为空</div>';
+            document.getElementById('slow-queue').innerHTML = slowHtml || '<div class="text-gray-400 text-sm">慢充等待区为空</div>';
 
-            let slowHtml = '';
-            slowQueue.forEach((q, i) => {
-                slowHtml += `
-                    <div class="queue-card hover:border-blue-300 transition-colors">
-                        <div class="flex justify-between items-center">
-                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
-                            <span class="badge badge-slow">T${i + 1}</span>
-                        </div>
-                        <div class="text-xs mt-1">
-                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
-                        </div>
-                        <div class="text-xs text-gray-400 mt-1">
-                            电量: ${q.requested_capacity}度 | 等待: ${formatDuration(q.queue_duration)}
-                        </div>
-                        <button onclick="removeFromQueue('${q.vehicle_id}')" class="btn-danger w-full mt-2 py-1 text-xs text-white rounded-lg">
-                            移除
-                        </button>
-                    </div>
-                `;
-            });
-            document.getElementById('slow-queue').innerHTML = slowHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+            const allQueue = [
+                ...fastQueue.map((q, i) => ({...q, type: 'Fast', fifoIndex: i + 1})),
+                ...slowQueue.map((q, i) => ({...q, type: 'Slow', fifoIndex: i + 1}))
+            ];
 
-            let allQueue = [
-                ...fastQueue.map(q => ({...q, type: 'Fast'})),
-                ...slowQueue.map(q => ({...q, type: 'Slow'}))
-            ].sort((a, b) => a.queue_num.localeCompare(b.queue_num));
-
-            let detailsHtml = '';
-            allQueue.forEach(q => {
-                detailsHtml += `
-                    <div class="queue-card hover:border-blue-300 transition-colors">
-                        <div class="flex justify-between items-center">
-                            <span class="font-semibold text-gray-800">${q.vehicle_id}</span>
-                            <span class="${q.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${q.queue_num}</span>
-                        </div>
-                        <div class="text-xs mt-1">
-                            <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">等候区</span>
-                        </div>
-                        <div class="text-xs text-gray-400 mt-1">
-                            电池: ${q.battery_capacity}度 | 请求: ${q.requested_capacity}度 | ${formatDuration(q.queue_duration)}
-                        </div>
+            const detailsHtml = allQueue.map(q => `
+                <div class="queue-card hover:border-blue-300 transition-colors">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-800">${q.vehicle_id || '-'}</span>
+                        <span class="${q.type === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">${q.queue_num || q.queue_number || q.fifoIndex}</span>
                     </div>
-                `;
-            });
-            document.getElementById('queue-details').innerHTML = detailsHtml || '<div class="text-gray-400 text-sm">暂无等候车辆</div>';
+                    <div class="text-xs mt-1">
+                        <span style="background:rgba(212,180,131,0.25);color:#ad7e64;padding:1px 6px;border-radius:9999px;font-size:11px;font-weight:600">${q.type === 'Fast' ? '快充' : '慢充'} FIFO 顺序</span>
+                    </div>
+                    <div class="text-xs text-gray-400 mt-1">
+                        电池容量：${formatKwh(q.battery_capacity)} kWh | 请求电量：${formatKwh(q.requested_capacity || q.requested_kwh)} kWh | ${formatDuration(q.queue_duration)}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('queue-details').innerHTML = detailsHtml || '<div class="text-gray-400 text-sm">等待区为空</div>';
         }
 
         async function loadReportData() {
@@ -1151,12 +1245,37 @@
             showNotification(`车辆 ${vehicleId} 已从队列移除`, 'success');
         }
 
+        async function controlPile(pileId, action) {
+            const payload = { action };
+            if (action === 'fault') {
+                const duration = Number(document.getElementById('fault-duration-minutes')?.value || 0);
+                if (duration > 0) payload.duration_minutes = duration;
+            }
+
+            const res = await fetch(`/api/admin/piles/${pileId}/control`, {
+                method: 'POST',
+                headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || data.message || '充电桩控制失败');
+            showNotification(data.message || '操作成功', 'success');
+            await poll();
+            await loadStatusLogs();
+            await loadAcceptanceSnapshot(false);
+        }
+
         function startPile(pileId) {
-            showNotification(`充电桩 ${pileId} 已启动`, 'success');
+            controlPile(pileId, 'start').catch(e => showNotification(e.message, 'error'));
+        }
+
+        function faultPile(pileId) {
+            if (!confirm(`确认将 ${pileId} 设为故障中？`)) return;
+            controlPile(pileId, 'fault').catch(e => showNotification(e.message, 'error'));
         }
 
         function resetPile(pileId) {
-            showNotification(`充电桩 ${pileId} 故障已重置`, 'success');
+            controlPile(pileId, 'recover').catch(e => showNotification(e.message, 'error'));
         }
 
         function savePileSettings() {
@@ -1565,31 +1684,39 @@
             document.getElementById('admin-details-content').innerHTML = html;
         }
 
-        function exportCSV(type) {
+        function exportFile(type, ext = 'csv') {
             const token = localStorage.getItem('admin_token') || '';
-            const url = '/api/admin/export/' + type;
+            const url = ext === 'xlsx' ? `/api/admin/export/${type}.xlsx` : `/api/admin/export/${type}`;
             fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
                 .then(res => {
-                    if (!res.ok) throw new Error('Export failed');
+                    if (!res.ok) throw new Error('导出失败');
                     return res.blob();
                 })
                 .then(blob => {
                     const a = document.createElement('a');
                     a.href = URL.createObjectURL(blob);
-                    a.download = type + '.csv';
+                    a.download = `${type}.${ext}`;
+                    document.body.appendChild(a);
                     a.click();
+                    a.remove();
                     URL.revokeObjectURL(a.href);
-                    showNotification(type + ' CSV 已导出', 'success');
+                    showNotification(`${type} ${ext.toUpperCase()} 已导出`, 'success');
                 })
                 .catch(e => {
                     console.error('Export error:', e);
-                    showNotification('导出失败，请确认管理员登录', 'error');
+                    showNotification(e.message || '导出失败，请检查管理员登录状态', 'error');
                 });
+        }
+
+        function exportCSV(type) {
+            exportFile(type, 'csv');
         }
 
         window.onload = function() {
             initCharts();
             poll();
+            loadClock(false);
+            loadAcceptanceSnapshot(false);
             setInterval(poll, 1000);
         };
     </script>
