@@ -56,6 +56,8 @@ class ChargeOrder(Base):
     status = Column(String(20), default=OrderStatus.WAITING)
 
     created_at = Column(DateTime, nullable=False)
+    requested_start_time = Column(DateTime, nullable=True,
+                                  comment="车辆请求在虚拟时间线中的生效时间")
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     left_at = Column(DateTime, nullable=True)

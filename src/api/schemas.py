@@ -61,6 +61,8 @@ class ChargeRequest(BaseModel):
     vehicle_id: str = Field(..., description="车牌号")
     charge_type: str = Field(..., description="Fast 或 Slow")
     requested_kwh: float = Field(..., gt=0, description="请求充电量(度)")
+    requested_start_time: Optional[datetime] = Field(
+        None, description="该请求在统一虚拟时间线中的生效时间")
 
 
 class ChargeResponse(BaseModel):

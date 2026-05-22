@@ -344,6 +344,48 @@
     </header>
 
     <main class="container mx-auto px-4 py-6">
+        <section class="card bg-white rounded-lg p-4 mb-6">
+            <div class="flex flex-col xl:flex-row xl:items-end gap-4">
+                <div class="flex-1">
+                    <div class="flex flex-col md:flex-row md:items-center gap-3 mb-3">
+                        <h2 class="text-lg font-semibold text-gray-800">统一虚拟时间线</h2>
+                        <span id="clock-running-status" class="badge badge-warning w-fit">已暂停</span>
+                        <div class="text-2xl font-bold text-blue-700" id="clock-current-time">--</div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+                        <div>
+                            <label for="clock-allowed-start-input" class="block text-gray-500 mb-1">允许开始</label>
+                            <input id="clock-allowed-start-input" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="clock-allowed-end-input" class="block text-gray-500 mb-1">允许结束</label>
+                            <input id="clock-allowed-end-input" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="clock-real-minutes-input" class="block text-gray-500 mb-1">真实时间(分钟)</label>
+                            <input id="clock-real-minutes-input" type="number" min="0.1" step="0.1" value="30" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="clock-virtual-minutes-input" class="block text-gray-500 mb-1">虚拟时间(分钟)</label>
+                            <input id="clock-virtual-minutes-input" type="number" min="0.1" step="0.1" value="300" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="clock-ratio-input" class="block text-gray-500 mb-1">自动倍率</label>
+                            <input id="clock-ratio-input" type="number" min="0.000001" step="0.000001" value="1" readonly class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600">
+                        </div>
+                    </div>
+                    <input id="clock-time-input" type="hidden">
+                    <div id="clock-scale-desc" class="text-xs text-gray-500 mt-2">当前比例尺：--</div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="saveClock()" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">应用时间线</button>
+                    <button onclick="startClock()" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">开始流逝</button>
+                    <button onclick="pauseClock()" class="btn-secondary px-4 py-2 rounded-lg text-sm">暂停</button>
+                    <button onclick="resetClock()" class="btn-secondary px-4 py-2 rounded-lg text-sm">重置</button>
+                </div>
+            </div>
+        </section>
+
         <!-- 监控面板 -->
         <div id="monitor-panel">
             <!-- 统计概览 -->
@@ -513,32 +555,6 @@
         <!-- 系统设置面板 -->
         <div id="settings-panel" class="card bg-white rounded-lg p-6" style="display: none;">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">⚙️ 系统设置</h2>
-
-            <div class="border border-blue-100 bg-blue-50 rounded-lg p-4 mb-6">
-                <div class="flex flex-col lg:flex-row lg:items-end gap-4">
-                    <div class="flex-1">
-                        <h3 class="text-base font-semibold text-gray-800 mb-2">虚拟时间控制</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                            <div>
-                                <div class="text-gray-500 mb-1">当前虚拟时间</div>
-                                <div id="clock-current-time" class="font-semibold text-blue-700">--</div>
-                            </div>
-                            <div>
-                                <label for="clock-time-input" class="block text-gray-500 mb-1">设置时间</label>
-                                <input id="clock-time-input" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
-                            </div>
-                            <div>
-                                <label for="clock-ratio-input" class="block text-gray-500 mb-1">时间倍率</label>
-                                <input id="clock-ratio-input" type="number" min="0.1" step="0.1" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="saveClock()" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">应用</button>
-                        <button onclick="resetClock()" class="btn-secondary px-4 py-2 text-white rounded-lg text-sm">重置</button>
-                    </div>
-                </div>
-            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -889,7 +905,7 @@
                 settingsTab.classList.add('tab-active');
                 settingsPanel.style.display = 'block';
                 loadBillingConfig();
-                loadClock(false);
+                loadClock(false, true);
             }
         }
 
@@ -907,7 +923,7 @@
             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
         }
 
-        async function loadClock(showToast = false) {
+        async function loadClock(showToast = false, syncInputs = false) {
             try {
                 const res = await fetch('/api/admin/clock', { headers: adminHeaders() });
                 if (!res.ok) return;
@@ -917,9 +933,28 @@
                 const timeEl = document.getElementById('clock-current-time');
                 const inputEl = document.getElementById('clock-time-input');
                 const ratioEl = document.getElementById('clock-ratio-input');
+                const realEl = document.getElementById('clock-real-minutes-input');
+                const virtualEl = document.getElementById('clock-virtual-minutes-input');
+                const allowedStartEl = document.getElementById('clock-allowed-start-input');
+                const allowedEndEl = document.getElementById('clock-allowed-end-input');
+                const scaleDescEl = document.getElementById('clock-scale-desc');
                 if (timeEl) timeEl.innerText = time || '--';
-                if (inputEl && time && !inputEl.matches(':focus')) inputEl.value = toDateTimeLocal(time);
-                if (ratioEl && !ratioEl.matches(':focus')) ratioEl.value = ratio;
+                if (syncInputs && inputEl && time && !inputEl.matches(':focus')) inputEl.value = toDateTimeLocal(time);
+                if (syncInputs && ratioEl && !ratioEl.matches(':focus')) ratioEl.value = ratio;
+                const runningEl = document.getElementById('clock-running-status');
+                if (runningEl) {
+                    runningEl.textContent = data.running ? '流逝中' : '已暂停';
+                    runningEl.className = `badge ${data.running ? 'badge-success' : 'badge-warning'} w-fit`;
+                }
+                if (syncInputs && realEl && data.real_minutes && !realEl.matches(':focus')) realEl.value = data.real_minutes;
+                if (syncInputs && virtualEl && data.virtual_minutes && !virtualEl.matches(':focus')) virtualEl.value = data.virtual_minutes;
+                if (syncInputs && allowedStartEl && data.allowed_start && !allowedStartEl.matches(':focus')) allowedStartEl.value = toDateTimeLocal(data.allowed_start);
+                if (syncInputs && allowedEndEl && data.allowed_end && !allowedEndEl.matches(':focus')) allowedEndEl.value = toDateTimeLocal(data.allowed_end);
+                if (scaleDescEl) {
+                    const real = data.real_minutes || '--';
+                    const virtual = data.virtual_minutes || '--';
+                    scaleDescEl.innerText = `当前比例尺：真实 ${real} 分钟 = 虚拟 ${virtual} 分钟；底层倍率 ${ratio}`;
+                }
                 if (showToast) showNotification('虚拟时间已刷新', 'success');
             } catch (e) {
                 console.error('Load clock failed:', e);
@@ -928,9 +963,29 @@
 
         async function saveClock() {
             const timeValue = document.getElementById('clock-time-input')?.value;
-            const ratioValue = Number(document.getElementById('clock-ratio-input')?.value || 1);
-            const payload = { ratio: ratioValue };
-            if (timeValue) payload.datetime = timeValue.replace('T', ' ');
+            const ratioInput = document.getElementById('clock-ratio-input');
+            const realMinutes = Number(document.getElementById('clock-real-minutes-input')?.value || 0);
+            const virtualMinutes = Number(document.getElementById('clock-virtual-minutes-input')?.value || 0);
+            const allowedStart = document.getElementById('clock-allowed-start-input')?.value;
+            const allowedEnd = document.getElementById('clock-allowed-end-input')?.value;
+            const payload = {};
+            const computedRatio = realMinutes > 0 && virtualMinutes > 0 ? virtualMinutes / (realMinutes * 60) : null;
+            if (ratioInput && computedRatio) ratioInput.value = computedRatio.toFixed(6);
+            if (allowedStart) {
+                payload.allowed_start = allowedStart.replace('T', ' ');
+                payload.datetime = payload.allowed_start;
+                const timeInput = document.getElementById('clock-time-input');
+                if (timeInput) timeInput.value = allowedStart;
+            } else if (timeValue) {
+                payload.datetime = timeValue.replace('T', ' ');
+            }
+            if (realMinutes > 0 && virtualMinutes > 0) {
+                payload.real_minutes = realMinutes;
+                payload.virtual_minutes = virtualMinutes;
+            } else {
+                payload.ratio = Number(ratioInput?.value || 1);
+            }
+            if (allowedEnd) payload.allowed_end = allowedEnd.replace('T', ' ');
             try {
                 const res = await fetch('/api/admin/clock', {
                     method: 'PUT',
@@ -940,7 +995,7 @@
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(data.detail || data.message || '设置虚拟时间失败');
                 showNotification(data.message || '虚拟时间已更新', 'success');
-                await loadClock(false);
+                await loadClock(false, true);
                 await poll();
             } catch (e) {
                 showNotification(e.message, 'error');
@@ -953,8 +1008,32 @@
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(data.detail || data.message || '重置虚拟时间失败');
                 showNotification(data.message || '虚拟时间已重置', 'success');
-                await loadClock(false);
+                await loadClock(false, true);
                 await poll();
+            } catch (e) {
+                showNotification(e.message, 'error');
+            }
+        }
+
+        async function startClock() {
+            try {
+                const res = await fetch('/api/admin/clock/start', { method: 'POST', headers: adminHeaders() });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || data.message || '启动虚拟时间失败');
+                showNotification(data.message || '虚拟时间已开始流逝', 'success');
+                await loadClock(false, true);
+            } catch (e) {
+                showNotification(e.message, 'error');
+            }
+        }
+
+        async function pauseClock() {
+            try {
+                const res = await fetch('/api/admin/clock/pause', { method: 'POST', headers: adminHeaders() });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || data.message || '暂停虚拟时间失败');
+                showNotification(data.message || '虚拟时间已暂停', 'success');
+                await loadClock(false, true);
             } catch (e) {
                 showNotification(e.message, 'error');
             }
@@ -1715,9 +1794,10 @@
         window.onload = function() {
             initCharts();
             poll();
-            loadClock(false);
+            loadClock(false, true);
             loadAcceptanceSnapshot(false);
             setInterval(poll, 1000);
+            setInterval(() => loadClock(false), 1000);
         };
     </script>
 </body>

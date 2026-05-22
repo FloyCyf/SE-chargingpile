@@ -248,6 +248,23 @@
     </header>
 
     <main class="container mx-auto px-4 py-6">
+        <section class="card bg-white rounded-lg p-4 mb-6">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-lg font-semibold text-gray-800">统一虚拟世界时钟</h2>
+                        <span id="user-clock-running-status" class="badge badge-warning">已暂停</span>
+                    </div>
+                    <div id="user-clock-current" class="text-2xl font-bold text-blue-700 mt-1">--</div>
+                    <div id="user-clock-range" class="text-xs text-gray-500 mt-1">请先由管理端设置整体时间线</div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="startUserClock()" class="btn-primary px-4 py-2 rounded-lg text-sm">开始流逝</button>
+                    <button onclick="pauseUserClock()" class="btn-secondary px-4 py-2 rounded-lg text-sm">暂停</button>
+                </div>
+            </div>
+        </section>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- 左侧：充电请求面板 -->
             <div class="card bg-white rounded-lg p-6">
@@ -268,6 +285,17 @@
                         <div id="vehicle-info" class="mt-2 text-xs text-gray-500 hidden">
                             <span>已注册 | 电池容量: <span id="v-cap" class="font-semibold">--</span> kWh | 当前电量: <span id="v-current" class="font-semibold">--</span> kWh | 可充: <span id="v-available" class="font-semibold text-green-600">--</span> kWh</span>
                         </div>
+                    </div>
+
+                    <div class="border border-blue-100 bg-blue-50 rounded-lg p-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="user-start-time" class="block text-sm text-gray-600">本车请求生效时间</label>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="datetime-local" id="user-start-time" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                            <button onclick="useCurrentClockForVehicle()" class="btn-secondary px-3 py-2 rounded-lg text-sm">填入当前</button>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">提交后不会立刻进入充电区，只有虚拟时间到达该时刻后才参与调度。</div>
                     </div>
 
                     <div>
@@ -462,9 +490,15 @@
         let vehicleRegistered = false;
         let vehicleBatteryCap = 60;
         let vehicleCurrentKwh = 0;
+        const VEHICLE_SESSION_KEY = 'charging_vehicle_session_id';
+        let vehicleSessionId = sessionStorage.getItem(VEHICLE_SESSION_KEY);
+        if (!vehicleSessionId) {
+            vehicleSessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+            sessionStorage.setItem(VEHICLE_SESSION_KEY, vehicleSessionId);
+        }
 
         async function registerVehicle() {
-            const vehicleId = document.getElementById('vid').value;
+            const vehicleId = document.getElementById('vid').value.trim().toUpperCase();
             const batteryCap = parseFloat(document.getElementById('battery-cap').value);
 
             if (!vehicleId) {
@@ -477,13 +511,23 @@
             }
 
             try {
+                if (currentVehicleId && currentVehicleId !== vehicleId) {
+                    await axios.post('/api/vehicle/logout', {
+                        vehicle_id: currentVehicleId,
+                        session_id: vehicleSessionId
+                    }).catch(() => {});
+                }
                 const response = await axios.post('/api/vehicle/register', {
                     vehicle_id: vehicleId,
                     battery_capacity_kwh: batteryCap,
-                    current_kwh: 0
+                    current_kwh: 0,
+                    session_id: vehicleSessionId
                 });
                 const data = response.data;
                 vehicleRegistered = true;
+                currentVehicleId = data.vehicle_id;
+                document.getElementById('vid').value = data.vehicle_id;
+                document.getElementById('current-user').textContent = data.vehicle_id;
                 vehicleBatteryCap = data.battery_capacity_kwh;
                 vehicleCurrentKwh = data.current_kwh;
                 updateVehicleInfoDisplay();
@@ -494,6 +538,8 @@
                     showNotification('车辆已注册，已加载信息', 'success');
                 }
                 updateEstimated();
+                await updateCurrentStatus();
+                await loadDetails('current');
             } catch (error) {
                 console.error('Error registering vehicle:', error);
                 showNotification('车辆注册失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
@@ -501,16 +547,29 @@
         }
 
         async function loadVehicleInfo(vehicleId) {
+            vehicleId = (vehicleId || '').trim().toUpperCase();
             if (!vehicleId) return;
             try {
-                const response = await axios.get(`/api/vehicle/info/${vehicleId}`);
+                const response = await axios.get(`/api/vehicle/info/${vehicleId}?session_id=${encodeURIComponent(vehicleSessionId)}`);
                 const data = response.data;
                 if (data.status === 'found') {
-                    vehicleRegistered = true;
                     vehicleBatteryCap = data.battery_capacity_kwh;
                     vehicleCurrentKwh = data.current_kwh;
                     document.getElementById('battery-cap').value = vehicleBatteryCap;
-                    updateVehicleInfoDisplay();
+                    if (data.logged_in_here) {
+                        vehicleRegistered = true;
+                        currentVehicleId = data.vehicle_id;
+                        document.getElementById('vid').value = data.vehicle_id;
+                        document.getElementById('current-user').textContent = data.vehicle_id;
+                        updateVehicleInfoDisplay();
+                        await updateCurrentStatus();
+                    } else {
+                        vehicleRegistered = false;
+                        document.getElementById('vehicle-info').classList.add('hidden');
+                        if (data.locked_elsewhere) {
+                            showNotification('该车牌已在其它页面登录，请先退出或重启后端释放会话', 'error');
+                        }
+                    }
                 } else {
                     vehicleRegistered = false;
                     document.getElementById('vehicle-info').classList.add('hidden');
@@ -572,6 +631,79 @@
             });
         }
 
+        function toDateTimeLocal(value) {
+            if (!value) return '';
+            const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T');
+            const date = new Date(normalized);
+            if (Number.isNaN(date.getTime())) return '';
+            const pad = n => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        async function loadUserClock() {
+            try {
+                const response = await axios.get('/api/user/clock');
+                const data = response.data;
+                document.getElementById('user-clock-current').textContent = data.current_virtual_time || '--';
+                const runningEl = document.getElementById('user-clock-running-status');
+                if (runningEl) {
+                    runningEl.textContent = data.running ? '流逝中' : '已暂停';
+                    runningEl.className = `badge ${data.running ? 'badge-success' : 'badge-warning'}`;
+                }
+                const input = document.getElementById('user-start-time');
+                if (input && data.current_virtual_time && !input.matches(':focus') && !input.value) {
+                    input.value = toDateTimeLocal(data.current_virtual_time);
+                }
+                const range = document.getElementById('user-clock-range');
+                const start = data.allowed_start || '--';
+                const end = data.allowed_end || '--';
+                range.textContent = `管理员允许时间线：${start} 至 ${end}`;
+            } catch (e) {
+                console.error('Load user clock failed:', e);
+            }
+        }
+
+        function useCurrentClockForVehicle() {
+            const current = document.getElementById('user-clock-current')?.textContent;
+            const input = document.getElementById('user-start-time');
+            if (input && current && current !== '--') {
+                input.value = toDateTimeLocal(current);
+                showNotification('已填入当前虚拟时间', 'success');
+            }
+        }
+
+        async function startUserClock() {
+            try {
+                const response = await axios.post('/api/user/clock/start');
+                document.getElementById('user-clock-current').textContent = response.data.current_virtual_time || '--';
+                await loadUserClock();
+                showNotification('系统虚拟时间已开始流逝', 'success');
+            } catch (error) {
+                showNotification('启动虚拟时间失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
+            }
+        }
+
+        async function pauseUserClock() {
+            try {
+                const response = await axios.post('/api/user/clock/pause');
+                document.getElementById('user-clock-current').textContent = response.data.current_virtual_time || '--';
+                await loadUserClock();
+                showNotification('系统虚拟时间已暂停', 'success');
+            } catch (error) {
+                showNotification('暂停虚拟时间失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
+            }
+        }
+
+        function releaseVehicleSession() {
+            const vehicleId = currentVehicleId || document.getElementById('vid')?.value;
+            if (!vehicleId || !vehicleSessionId) return;
+            const payload = JSON.stringify({
+                vehicle_id: vehicleId.trim().toUpperCase(),
+                session_id: vehicleSessionId
+            });
+            navigator.sendBeacon('/api/vehicle/logout', new Blob([payload], { type: 'application/json' }));
+        }
+
         function updateEstimated() {
             const capacity = parseFloat(document.getElementById('capacity').value) || 0;
             const power = chargeMode === 'Fast' ? globalFastPower : globalSlowPower;
@@ -600,7 +732,7 @@
         }
 
         async function submitRequest() {
-            const vehicleId = document.getElementById('vid').value;
+            const vehicleId = document.getElementById('vid').value.trim().toUpperCase();
             const capacity = parseFloat(document.getElementById('capacity').value);
 
             if (!vehicleId) {
@@ -613,23 +745,9 @@
                 return;
             }
 
-            // 如果车辆未注册，先自动注册
-            if (!vehicleRegistered) {
-                const batteryCap = parseFloat(document.getElementById('battery-cap').value) || 60;
-                try {
-                    const regRes = await axios.post('/api/vehicle/register', {
-                        vehicle_id: vehicleId,
-                        battery_capacity_kwh: batteryCap,
-                        current_kwh: 0
-                    });
-                    const regData = regRes.data;
-                    vehicleRegistered = true;
-                    vehicleBatteryCap = regData.battery_capacity_kwh;
-                    vehicleCurrentKwh = regData.current_kwh;
-                    updateVehicleInfoDisplay();
-                } catch (e) {
-                    console.error('Auto-register failed:', e);
-                }
+            if (!vehicleRegistered || currentVehicleId !== vehicleId) {
+                showNotification('请先点击“注册车辆”完成本车注册/登录，再提交充电请求', 'error');
+                return;
             }
 
             // 校验充电量不超过可充余量
@@ -651,20 +769,23 @@
             const payload = {
                 vehicle_id: vehicleId,
                 charge_type: chargeMode,
-                requested_capacity: capacity
+                requested_capacity: capacity,
+                session_id: vehicleSessionId
             };
+            const startTime = document.getElementById('user-start-time')?.value;
+            if (startTime) payload.start_datetime = startTime.replace('T', ' ');
 
             try {
                 const response = await axios.post('/api/user/charge/request', payload);
                 
-                showNotification('充电请求已提交成功！', 'success');
+                showNotification(response.data?.message || '充电请求已提交成功！', 'success');
                 
                 currentVehicleId = vehicleId;
                 document.getElementById('current-user').textContent = vehicleId;
                 await updateCurrentStatus();
             } catch (error) {
                 console.error('Error submitting charge request:', error);
-                showNotification('提交失败，请重试', 'error');
+                showNotification('提交失败: ' + (error.response?.data?.detail || '请重试'), 'error');
             } finally {
                 document.getElementById('submit-btn-text').textContent = '提交充电请求';
                 document.getElementById('submit-loading').classList.add('hidden');
@@ -676,7 +797,7 @@
                 const vehicleId = currentVehicleId;
                 if (!vehicleId) return;
                 
-                const response = await axios.get(`/api/user/vehicle/status/${vehicleId}`);
+                const response = await axios.get(`/api/user/vehicle/status/${vehicleId}?session_id=${encodeURIComponent(vehicleSessionId)}`);
                 const data = response.data;
                 
                 const capacity = document.getElementById('capacity').value;
@@ -684,6 +805,11 @@
                     '等候区': 'background:rgba(212,180,131,0.3);color:#ad7e64;border:1px solid rgba(212,180,131,0.5)',
                     '充电区': 'background:rgba(102,126,234,0.3);color:#667eea;border:1px solid rgba(102,126,234,0.5)',
                     '已离开': 'background:rgba(136,163,136,0.3);color:#6e896e;border:1px solid rgba(136,163,136,0.5)',
+                    'waiting_area': 'background:rgba(212,180,131,0.3);color:#ad7e64;border:1px solid rgba(212,180,131,0.5)',
+                    'charging_area': 'background:rgba(102,126,234,0.3);color:#667eea;border:1px solid rgba(102,126,234,0.5)',
+                    'scheduled': 'background:rgba(125,148,166,0.22);color:#4d6273;border:1px solid rgba(125,148,166,0.4)',
+                    'left_area': 'background:rgba(136,163,136,0.3);color:#6e896e;border:1px solid rgba(136,163,136,0.5)',
+                    'not_submitted': 'background:rgba(143,138,126,0.2);color:#666;border:1px solid rgba(143,138,126,0.4)',
                 };
                 const areaStyle = areaBadgeColor[data.area] || 'background:#eee;color:#666';
                 const statusHtml = `
@@ -725,7 +851,8 @@
                     if (!vehicleId) return;
                     
                     await axios.post('/api/user/charge/cancel', {
-                        vehicle_id: vehicleId
+                        vehicle_id: vehicleId,
+                        session_id: vehicleSessionId
                     });
                     
                     showNotification('充电请求已取消', 'warning');
@@ -759,12 +886,12 @@
 
         async function loadDetails(type) {
             try {
-                const vehicleId = document.getElementById('vid').value;
-                if (!vehicleId) {
-                    document.getElementById('detail-list').innerHTML = '<div class="text-center py-8 text-gray-500">请输入车牌号以查看详情</div>';
+                const vehicleId = (currentVehicleId || document.getElementById('vid').value || '').trim().toUpperCase();
+                if (!vehicleId || !vehicleRegistered) {
+                    document.getElementById('detail-list').innerHTML = '<div class="text-center py-8 text-gray-500">请先注册/登录车辆以查看账单和详单</div>';
                     return;
                 }
-                const response = await axios.get(`/api/user/orders/${vehicleId}`);
+                const response = await axios.get(`/api/user/orders/${vehicleId}?session_id=${encodeURIComponent(vehicleSessionId)}`);
                 let details = response.data;
                 
                 if (type === 'current') {
@@ -968,7 +1095,8 @@
             document.getElementById('bill-vehicle-id').textContent = document.getElementById('vid').value || '--';
             document.getElementById('bill-pile-id').textContent = orderData.pile_id;
             document.getElementById('bill-electricity').textContent = `${orderData.electricity.toFixed(2)} kWh`;
-            document.getElementById('bill-time').textContent = formatDateTime(new Date().toISOString());
+            const virtualEndTime = orderData.end_time || orderData.finished_at;
+            document.getElementById('bill-time').textContent = virtualEndTime ? formatDateTime(virtualEndTime) : '--';
             document.getElementById('bill-electricity-fee').textContent = orderData.electricity_fee.toFixed(2);
             document.getElementById('bill-service-fee').textContent = orderData.service_fee.toFixed(2);
             document.getElementById('bill-total-fee').textContent = orderData.total_fee.toFixed(2);
@@ -1006,13 +1134,13 @@
         let lastVehicleState = null;
 
         async function checkVehicleStatus() {
-            const vehicleId = document.getElementById('vid').value;
-            if (!vehicleId) {
+            const vehicleId = currentVehicleId || document.getElementById('vid').value;
+            if (!vehicleId || !vehicleRegistered) {
                 lastVehicleState = null;
                 return;
             }
             try {
-                const res = await fetch(`/api/user/vehicle/status/${vehicleId}`);
+                const res = await fetch(`/api/user/vehicle/status/${vehicleId}?session_id=${encodeURIComponent(vehicleSessionId)}`);
                 if (!res.ok) return;
                 const data = await res.json();
 
@@ -1040,6 +1168,7 @@
 
         function initPage() {
             setChargeMode('Fast');
+            loadUserClock();
             loadQueueList();
             loadPileStatus();
             showTab('current');
@@ -1057,12 +1186,14 @@
             initPage();
 
             setInterval(() => {
+                loadUserClock();
                 loadQueueList();
                 loadPileStatus();
             }, 1000);
 
             setInterval(checkVehicleStatus, 500);
         };
+        window.addEventListener('beforeunload', releaseVehicleSession);
     </script>
 </body>
 </html>

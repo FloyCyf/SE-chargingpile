@@ -117,6 +117,7 @@ class SmartScheduler:
         # 等候区（两个全局 FIFO 列表）
         self.fast_waiting: List[dict] = []
         self.slow_waiting: List[dict] = []
+        self.pending_requests: List[dict] = []
         self.fast_fault_waiting: List[dict] = []
         self.slow_fault_waiting: List[dict] = []
         self.fault_recover_tasks: dict[str, asyncio.Task] = {}
@@ -243,6 +244,7 @@ class SmartScheduler:
             cars_in_piles = sum(len(p.queue) for p in self.piles)
             cars_in_waiting = (
                 len(self.fast_waiting) + len(self.slow_waiting)
+                + len(self.pending_requests)
                 + len(self.fast_fault_waiting) + len(self.slow_fault_waiting)
             )
             total_cars = cars_in_piles + cars_in_waiting
@@ -253,6 +255,11 @@ class SmartScheduler:
                         "queue_position": None, "assigned_pile": None}
 
             current_vtime = self.clock.get_time()
+            requested_start_time = (
+                request.requested_start_time
+                if request.requested_start_time is not None
+                else current_vtime
+            )
 
             queue_number = self._next_queue_number(request.charge_type)
 
@@ -287,7 +294,8 @@ class SmartScheduler:
                     requested_kwh=actual_requested,
                     queue_number=queue_number,
                     status=OrderStatus.WAITING,
-                    created_at=current_vtime,
+                    created_at=requested_start_time,
+                    requested_start_time=requested_start_time,
                 )
                 session.add(new_order)
                 await session.commit()
@@ -302,10 +310,27 @@ class SmartScheduler:
                 "order_id": order_id,
                 "queue_number": queue_number,
                 "user_id": user_id,
-                "created_at": current_vtime,
+                "created_at": requested_start_time,
+                "requested_start_time": requested_start_time,
                 "battery_capacity_kwh": battery_capacity,
                 "current_vehicle_kwh": current_vehicle_kwh,
             }
+
+            if requested_start_time > current_vtime:
+                self.pending_requests.append(queue_item)
+                self.pending_requests.sort(
+                    key=lambda c: (c.get("requested_start_time") or c["created_at"],
+                                   _queue_number_sort_key(c.get("queue_number", "Z999"))))
+                return {
+                    "status": "success",
+                    "message": (f"已预约到虚拟时间 "
+                                f"{requested_start_time.strftime('%Y-%m-%d %H:%M:%S')} "
+                                f"生效，到点后再参与调度"),
+                    "order_id": order_id,
+                    "queue_number": queue_number,
+                    "queue_position": len(self.pending_requests),
+                    "assigned_pile": None,
+                }
 
             # 尝试直接分配到最优桩队列
             optimal_pile = None
@@ -390,6 +415,8 @@ class SmartScheduler:
             await asyncio.sleep(1.0)
             async with self.lock:
                 current_vtime = self.clock.get_time()
+                if not self.clock.running:
+                    continue
 
                 for pile in self.piles:
                     if pile.status != "CHARGING" or len(pile.queue) == 0:
@@ -398,7 +425,7 @@ class SmartScheduler:
                     car = pile.queue[0]  # position 0 = 正在充电
                     # 每真实秒对应 virtual_ratio 虚拟分钟
                     # kWh 增量 = power(kW) * 虚拟分钟数 / 60
-                    increment = pile.power * self.virtual_ratio / 60.0
+                    increment = pile.power * self.clock.ratio / 60.0
                     car["charged_kwh"] += increment
                     car["charged_kwh"] = round(car["charged_kwh"], 4)
 
@@ -616,6 +643,7 @@ class SmartScheduler:
 
     async def dispatch_from_waiting_area_async(self):
         """异步版本：调度 + DB 更新"""
+        await self._activate_pending_requests()
         await self._dispatch_fault_waiting_async()
         if self._has_fault_waiting():
             return
@@ -643,6 +671,32 @@ class SmartScheduler:
                     reason=f"等候区车辆{car['vehicle_id']}调度充电")
         self._pending_db_updates = []
 
+    async def _activate_pending_requests(self):
+        """把已到预约生效时间的请求移入普通等候区，再参与调度。"""
+        if not self.pending_requests:
+            return
+
+        current_vtime = self.clock.get_time()
+        ready = [
+            item for item in self.pending_requests
+            if (item.get("requested_start_time") or item["created_at"]) <= current_vtime
+        ]
+        if not ready:
+            return
+
+        ready_ids = {item["order_id"] for item in ready}
+        self.pending_requests[:] = [
+            item for item in self.pending_requests
+            if item["order_id"] not in ready_ids
+        ]
+
+        ready.sort(key=lambda c: (
+            c.get("requested_start_time") or c["created_at"],
+            _queue_number_sort_key(c.get("queue_number", "Z999"))))
+        for item in ready:
+            target = self.fast_waiting if item["charge_type"] == "Fast" else self.slow_waiting
+            target.append(item)
+
     async def dispatch_watcher(self):
         """后台任务：每 2 秒检查桩队列空位，从等候区调度"""
         while True:
@@ -660,6 +714,7 @@ class SmartScheduler:
 
             # 1. 检查等候区
             for waiting_list in [
+                self.pending_requests,
                 self.fast_waiting, self.slow_waiting,
                 self.fast_fault_waiting, self.slow_fault_waiting,
             ]:
@@ -1221,9 +1276,12 @@ class SmartScheduler:
                 pile.status = "CHARGING"
                 print(f"[Restore] 桩 {pile_id} 恢复 {len(pile.queue)} 辆车")
 
-        # 恢复等候区
+        current_vtime = self.clock.get_time()
+
+        # 恢复预约区 / 等候区
         for o in waiting_orders:
             veh = vehicles.get(o.vehicle_id)
+            requested_start = o.requested_start_time or o.created_at
             queue_item = {
                 "vehicle_id": o.vehicle_id,
                 "charge_type": o.charge_type,
@@ -1232,16 +1290,19 @@ class SmartScheduler:
                 "order_id": o.id,
                 "queue_number": o.queue_number or "",
                 "user_id": o.user_id,
-                "created_at": o.created_at,
+                "created_at": requested_start,
+                "requested_start_time": requested_start,
                 "battery_capacity_kwh": veh.battery_capacity_kwh if veh else self.battery_capacity,
                 "current_vehicle_kwh": veh.current_kwh if veh else 0.0,
             }
-            if o.charge_type == "Fast":
+            if requested_start and requested_start > current_vtime:
+                self.pending_requests.append(queue_item)
+            elif o.charge_type == "Fast":
                 self.fast_waiting.append(queue_item)
             else:
                 self.slow_waiting.append(queue_item)
 
-        print(f"[Restore] 等候区恢复: Fast={len(self.fast_waiting)}, Slow={len(self.slow_waiting)}")
+        print(f"[Restore] 等候区恢复: Fast={len(self.fast_waiting)}, Slow={len(self.slow_waiting)}, Pending={len(self.pending_requests)}")
 
         # 同步排队号计数器，避免重复
         all_qns = [o.queue_number for o in orders if o.queue_number]
@@ -1337,10 +1398,23 @@ class SmartScheduler:
             "piles": piles_data,
             "fast_waiting_count": len(self.fast_waiting),
             "slow_waiting_count": len(self.slow_waiting),
+            "pending_count": len(self.pending_requests),
         }
 
     def get_queue_position(self, order_id: int) -> Optional[dict]:
         """查询某订单的排队位置"""
+        for i, item in enumerate(self.pending_requests):
+            if item['order_id'] == order_id:
+                return {
+                    "order_id": order_id,
+                    "queue_number": item.get("queue_number"),
+                    "status": "SCHEDULED",
+                    "ahead_count": i,
+                    "pile_id": None,
+                    "charge_type": item["charge_type"],
+                    "requested_kwh": item["requested_kwh"],
+                }
+
         # 检查等候区
         for ctype, wlist in [("Fast", self.fast_waiting),
                              ("Slow", self.slow_waiting)]:
@@ -1393,6 +1467,7 @@ class SmartScheduler:
                 "requested_kwh": item["requested_kwh"],
                 "user_id": item.get("user_id"),
                 "waiting_since": created_at,
+                "requested_start_time": item.get("requested_start_time"),
                 "priority_score": round(
                     self.calculate_priority(item, current_vtime), 4),
                 "soc": round(max(0.0, min(1.0, soc)), 4),
@@ -1404,6 +1479,8 @@ class SmartScheduler:
         sorted_slow = self._sorted_by_priority(self.slow_waiting, current_vtime)
 
         return {
+            "pending": [_build_item(i, i["charge_type"])
+                        for i in self.pending_requests],
             "fast_waiting": [_build_item(i, "Fast") for i in sorted_fast],
             "slow_waiting": [_build_item(i, "Slow") for i in sorted_slow],
         }

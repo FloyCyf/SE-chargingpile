@@ -18,9 +18,12 @@ class VirtualClock:
             self.ratio = 1
         self.real_start_time = time.time()
         self.virtual_start_time = datetime.now()
+        self.running = False
 
     def get_time(self) -> datetime:
         """获取此时刻折算倍率后的系统虚拟时间"""
+        if not self.running:
+            return self.virtual_start_time
         real_elapsed_seconds = time.time() - self.real_start_time
         # 流逝现实的 N 秒 = 虚拟世界里流逝的 N * ratio 分钟
         virtual_elapsed_minutes = real_elapsed_seconds * self.ratio
@@ -38,7 +41,21 @@ class VirtualClock:
         self.virtual_start_time = current_vtime
         self.ratio = ratio
 
+    def start(self):
+        """开始虚拟时间流逝。"""
+        if not self.running:
+            self.real_start_time = time.time()
+            self.running = True
+
+    def pause(self):
+        """暂停虚拟时间流逝，并固定在暂停瞬间。"""
+        if self.running:
+            self.virtual_start_time = self.get_time()
+            self.real_start_time = time.time()
+            self.running = False
+
     def reset(self):
         """重置虚拟时间为当前真实时间（倍率不变）"""
         self.real_start_time = time.time()
         self.virtual_start_time = datetime.now()
+        self.running = False

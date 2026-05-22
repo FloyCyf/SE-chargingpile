@@ -473,6 +473,10 @@ async def export_bill_details_csv(
 class ClockSetBody(BaseModel):
     datetime: Optional[str] = None   # "YYYY-MM-DD HH:MM:SS" 或 "HH:MM:SS"（今日日期）
     ratio: Optional[float] = None    # 时间推进倍率
+    real_minutes: Optional[float] = None
+    virtual_minutes: Optional[float] = None
+    allowed_start: Optional[str] = None
+    allowed_end: Optional[str] = None
 
 
 @router.get("/clock")
@@ -485,6 +489,11 @@ async def get_clock(
     return {
         "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
         "ratio": clock.ratio,
+        "real_minutes": getattr(request.app.state, "clock_real_minutes", None),
+        "virtual_minutes": getattr(request.app.state, "clock_virtual_minutes", None),
+        "allowed_start": getattr(request.app.state, "clock_allowed_start", None),
+        "allowed_end": getattr(request.app.state, "clock_allowed_end", None),
+        "running": clock.running,
         "description": f"每真实1秒 = 虚拟{clock.ratio}分钟",
     }
 
@@ -499,26 +508,51 @@ async def set_clock(
     clock = request.app.state.scheduler.clock
     changed = []
 
-    if body.datetime is not None:
-        dt_str = body.datetime.strip()
-        # 支持 "HH:MM:SS" 或 "HH:MM" 格式（自动补今日日期）
+    def _parse_admin_dt(raw: str):
+        dt_str = raw.strip().replace("T", " ")
         if len(dt_str) <= 8:
             from datetime import date as _date
             today = _date.today().strftime("%Y-%m-%d")
             dt_str = f"{today} {dt_str}"
-        new_dt = None
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
             try:
-                new_dt = datetime.strptime(dt_str, fmt)
-                break
+                return datetime.strptime(dt_str, fmt)
             except ValueError:
                 continue
-        if new_dt is None:
-            raise HTTPException(
-                status_code=400,
-                detail="时间格式错误，支持 HH:MM:SS 或 YYYY-MM-DD HH:MM:SS")
+        raise HTTPException(
+            status_code=400,
+            detail="时间格式错误，支持 HH:MM、HH:MM:SS 或 YYYY-MM-DD HH:MM")
+
+    parsed_allowed_start = None
+    parsed_allowed_end = None
+
+    if body.allowed_start is not None:
+        parsed_allowed_start = _parse_admin_dt(body.allowed_start)
+        request.app.state.clock_allowed_start = parsed_allowed_start.strftime("%Y-%m-%d %H:%M:%S")
+        changed.append(f"允许开始时间设为 {request.app.state.clock_allowed_start}")
+
+    if body.allowed_end is not None:
+        parsed_allowed_end = _parse_admin_dt(body.allowed_end)
+        request.app.state.clock_allowed_end = parsed_allowed_end.strftime("%Y-%m-%d %H:%M:%S")
+        changed.append(f"允许结束时间设为 {request.app.state.clock_allowed_end}")
+
+    if body.datetime is not None:
+        new_dt = _parse_admin_dt(body.datetime)
         clock.set_time(new_dt)
         changed.append(f"虚拟时间设为 {new_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    elif parsed_allowed_start is not None:
+        clock.set_time(parsed_allowed_start)
+        changed.append(f"虚拟时间自动同步为允许开始时间 {parsed_allowed_start.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if body.real_minutes is not None or body.virtual_minutes is not None:
+        if body.real_minutes is None or body.virtual_minutes is None:
+            raise HTTPException(status_code=400, detail="real_minutes 和 virtual_minutes 需要同时提供")
+        if body.real_minutes <= 0 or body.virtual_minutes <= 0:
+            raise HTTPException(status_code=400, detail="real_minutes 和 virtual_minutes 必须大于0")
+        body.ratio = body.virtual_minutes / (body.real_minutes * 60.0)
+        request.app.state.clock_real_minutes = body.real_minutes
+        request.app.state.clock_virtual_minutes = body.virtual_minutes
+        changed.append(f"比例尺设为 真实{body.real_minutes}分钟 = 虚拟{body.virtual_minutes}分钟")
 
     if body.ratio is not None:
         if body.ratio <= 0:
@@ -534,6 +568,43 @@ async def set_clock(
         "changed": changed,
         "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
         "ratio": clock.ratio,
+        "real_minutes": getattr(request.app.state, "clock_real_minutes", None),
+        "virtual_minutes": getattr(request.app.state, "clock_virtual_minutes", None),
+        "allowed_start": getattr(request.app.state, "clock_allowed_start", None),
+        "allowed_end": getattr(request.app.state, "clock_allowed_end", None),
+        "running": clock.running,
+    }
+
+
+@router.post("/clock/start")
+async def start_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    clock = request.app.state.scheduler.clock
+    clock.start()
+    return {
+        "status": "success",
+        "message": "系统虚拟时间已开始流逝",
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+        "running": clock.running,
+    }
+
+
+@router.post("/clock/pause")
+async def pause_clock(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    clock = request.app.state.scheduler.clock
+    clock.pause()
+    return {
+        "status": "success",
+        "message": "系统虚拟时间已暂停",
+        "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
+        "ratio": clock.ratio,
+        "running": clock.running,
     }
 
 
@@ -550,6 +621,7 @@ async def reset_clock(
         "message": "虚拟时间已重置为当前真实时间",
         "current_virtual_time": clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
         "ratio": clock.ratio,
+        "running": clock.running,
     }
 
 

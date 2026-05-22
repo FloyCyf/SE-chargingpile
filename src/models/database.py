@@ -1,5 +1,6 @@
 import hashlib
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from src.models.models import Base, ChargingPile, User
 
@@ -22,6 +23,13 @@ AsyncSessionLocal = async_sessionmaker(
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        result = await conn.execute(text("PRAGMA table_info(charge_orders)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "requested_start_time" not in columns:
+            await conn.execute(text(
+                "ALTER TABLE charge_orders "
+                "ADD COLUMN requested_start_time DATETIME"
+            ))
 
 
 async def seed_admin():
