@@ -233,11 +233,13 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800">智能充电站 · 用户端</h1>
             </div>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-3">
                 <div class="text-right">
                     <p class="text-sm text-gray-500">当前用户</p>
                     <p class="text-sm font-medium text-gray-800" id="current-user">未登录</p>
                 </div>
+                <button id="auth-login-btn" onclick="showAuthModal()" class="btn-primary px-4 py-1.5 text-white rounded-lg text-sm">登录 / 注册</button>
+                <button id="auth-logout-btn" onclick="handleLogout()" class="btn-secondary px-4 py-1.5 text-white rounded-lg text-sm" style="display:none">退出</button>
                 <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -426,6 +428,60 @@
         </div>
     </div>
 
+    <!-- 认证弹窗 -->
+    <div id="authModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl p-8 w-full max-w-md shadow-xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">欢迎来到智能充电站</h2>
+                <button onclick="closeAuthModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex border-b border-gray-200 mb-6">
+                <button onclick="switchAuthTab('login')" id="auth-tab-login" class="flex-1 px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">登录</button>
+                <button onclick="switchAuthTab('register')" id="auth-tab-register" class="flex-1 px-4 py-2 text-gray-500 hover:text-gray-800">注册</button>
+            </div>
+            <!-- 登录表单 -->
+            <div id="auth-login-form">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">用户名</label>
+                        <input type="text" id="login-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入用户名">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">密码</label>
+                        <input type="password" id="login-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入密码">
+                    </div>
+                    <button onclick="handleLogin()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">登录</button>
+                </div>
+            </div>
+            <!-- 注册表单 -->
+            <div id="auth-register-form" style="display:none;">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">用户名</label>
+                        <input type="text" id="reg-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="2-50个字符">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">密码</label>
+                        <input type="password" id="reg-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="至少4位">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">确认密码</label>
+                        <input type="password" id="reg-password-confirm" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="再次输入密码">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">车牌号（选填）</label>
+                        <input type="text" id="reg-vehicle-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="例如京A88888">
+                    </div>
+                    <button onclick="handleRegister()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">注册</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 帮助弹窗 -->
     <div id="helpModal" class="modal" style="display: none;">
         <div class="modal-content bg-white rounded-xl p-8 w-full max-w-lg shadow-xl">
@@ -462,6 +518,127 @@
         let vehicleRegistered = false;
         let vehicleBatteryCap = 60;
         let vehicleCurrentKwh = 0;
+        let currentUser = null; // {user_id, username, role, vehicle_id}
+
+        // ---- 认证相关 ----
+        function setAuthState(user) {
+            currentUser = user;
+            const userEl = document.getElementById('current-user');
+            const loginBtn = document.getElementById('auth-login-btn');
+            const logoutBtn = document.getElementById('auth-logout-btn');
+            if (user) {
+                userEl.textContent = user.username;
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'inline-block';
+                if (user.vehicle_id) {
+                    document.getElementById('vid').value = user.vehicle_id;
+                    loadVehicleInfo(user.vehicle_id);
+                }
+            } else {
+                userEl.textContent = '未登录';
+                loginBtn.style.display = 'inline-block';
+                logoutBtn.style.display = 'none';
+            }
+        }
+
+        async function checkAuthState() {
+            const token = localStorage.getItem('user_token');
+            if (!token) { setAuthState(null); return; }
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setAuthState({ user_id: data.user_id, username: data.username, role: data.role, vehicle_id: data.vehicle_id });
+                } else {
+                    localStorage.removeItem('user_token');
+                    setAuthState(null);
+                }
+            } catch (e) {
+                setAuthState(null);
+            }
+        }
+
+        function showAuthModal() {
+            document.getElementById('authModal').style.display = 'flex';
+            switchAuthTab('login');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').style.display = 'none';
+        }
+
+        function switchAuthTab(tab) {
+            const loginTab = document.getElementById('auth-tab-login');
+            const registerTab = document.getElementById('auth-tab-register');
+            const loginForm = document.getElementById('auth-login-form');
+            const registerForm = document.getElementById('auth-register-form');
+            loginTab.classList.toggle('tab-active', tab === 'login');
+            registerTab.classList.toggle('tab-active', tab === 'register');
+            loginForm.style.display = tab === 'login' ? 'block' : 'none';
+            registerForm.style.display = tab === 'register' ? 'block' : 'none';
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            if (!username || !password) { showNotification('请输入用户名和密码', 'error'); return; }
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (!res.ok) { showNotification(data.detail || '登录失败', 'error'); return; }
+                localStorage.setItem('user_token', data.access_token);
+                setAuthState({ user_id: data.user_id, username: data.username, role: data.role, vehicle_id: null });
+                closeAuthModal();
+                showNotification('登录成功', 'success');
+            } catch (e) {
+                showNotification('网络连接失败', 'error');
+            }
+        }
+
+        async function handleRegister() {
+            const username = document.getElementById('reg-username').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const passwordConfirm = document.getElementById('reg-password-confirm').value;
+            const vehicleId = document.getElementById('reg-vehicle-id').value.trim();
+            if (!username || !password) { showNotification('请输入用户名和密码', 'error'); return; }
+            if (username.length < 2) { showNotification('用户名至少2个字符', 'error'); return; }
+            if (password.length < 4) { showNotification('密码至少4位', 'error'); return; }
+            if (password !== passwordConfirm) { showNotification('两次密码不一致', 'error'); return; }
+            try {
+                const body = { username, password };
+                if (vehicleId) body.vehicle_id = vehicleId;
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) { showNotification(data.detail || '注册失败', 'error'); return; }
+                localStorage.setItem('user_token', data.access_token);
+                setAuthState({ user_id: data.user_id, username: data.username, role: data.role, vehicle_id: vehicleId || null });
+                if (vehicleId) {
+                    document.getElementById('vid').value = vehicleId;
+                    loadVehicleInfo(vehicleId);
+                }
+                closeAuthModal();
+                showNotification('注册成功', 'success');
+            } catch (e) {
+                showNotification('网络连接失败', 'error');
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('user_token');
+            currentUser = null;
+            setAuthState(null);
+            showNotification('已退出登录', 'success');
+        }
 
         async function registerVehicle() {
             const vehicleId = document.getElementById('vid').value;
@@ -605,6 +782,12 @@
 
             if (!vehicleId) {
                 showNotification('请输入车牌号码', 'error');
+                return;
+            }
+
+            // 未登录时弹出认证弹窗
+            if (!currentUser) {
+                showAuthModal();
                 return;
             }
 
@@ -1053,7 +1236,8 @@
             });
         }
 
-        window.onload = function() {
+        window.onload = async function() {
+            await checkAuthState();
             initPage();
 
             setInterval(() => {

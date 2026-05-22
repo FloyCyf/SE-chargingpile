@@ -301,9 +301,93 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(255, 8, 68, 0.4);
         }
+
+        .auth-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(-45deg, #e0c3fc, #8ec5fc, #fbc2eb, #a18cd1);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+
+        .auth-overlay.hidden {
+            display: none;
+        }
+
+        .auth-card {
+            background: rgba(255, 255, 255, 0.6) !important;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+        }
     </style>
 </head>
 <body class="min-h-screen">
+    <!-- 认证遮罩层 -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">调度监控枢纽中心</h2>
+                <p class="text-sm text-gray-500 mt-1">管理员登录</p>
+            </div>
+            <div class="flex border-b border-gray-200 mb-6">
+                <button onclick="switchAuthTab('login')" id="auth-tab-login" class="flex-1 px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">登录</button>
+                <button onclick="switchAuthTab('register')" id="auth-tab-register" class="flex-1 px-4 py-2 text-gray-500 hover:text-gray-800">注册</button>
+            </div>
+            <div id="auth-login-form">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">用户名</label>
+                        <input type="text" id="admin-login-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入管理员用户名">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">密码</label>
+                        <input type="password" id="admin-login-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入密码">
+                    </div>
+                    <button onclick="handleAdminLogin()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">登录</button>
+                    <p class="text-xs text-gray-400 text-center">默认管理员: admin / admin123</p>
+                </div>
+            </div>
+            <div id="auth-register-form" style="display:none;">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">用户名</label>
+                        <input type="text" id="admin-reg-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="2-50个字符">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">密码</label>
+                        <input type="password" id="admin-reg-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="至少4位">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">确认密码</label>
+                        <input type="password" id="admin-reg-password-confirm" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="再次输入密码">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">车牌号（选填）</label>
+                        <input type="text" id="admin-reg-vehicle-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="例如京A88888">
+                    </div>
+                    <button onclick="handleAdminRegister()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">注册</button>
+                    <p class="text-xs text-gray-400 text-center">注册的新用户为普通用户，无管理员权限</p>
+                </div>
+            </div>
+            <div id="auth-error" class="mt-4 text-sm text-red-500 text-center hidden"></div>
+        </div>
+    </div>
+
     <div class="loading-bar"></div>
 
     <header class="bg-white shadow-sm">
@@ -334,6 +418,8 @@
                         状态日志
                     </button>
                 </div>
+                <span id="admin-user-info" class="text-sm text-gray-500"><span class="font-medium text-gray-700" id="admin-username-display">--</span></span>
+                <button id="admin-logout-btn" onclick="handleAdminLogout()" class="btn-secondary px-3 py-1 text-sm text-white rounded-lg" style="display:none">退出</button>
                 <button onclick="showHelp()" class="text-gray-500 hover:text-gray-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -814,6 +900,143 @@
         let previousPiles = {};
         let currentPeriod = 'day';
         let electricityChart, revenueChart;
+        let currentAdmin = null; // {user_id, username, role}
+        let pollIntervalId = null;
+        let appInitialized = false;
+
+        // ---- 认证相关 ----
+        function showAuthError(msg) {
+            const el = document.getElementById('auth-error');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function hideAuthError() {
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+
+        function switchAuthTab(tab) {
+            const loginTab = document.getElementById('auth-tab-login');
+            const registerTab = document.getElementById('auth-tab-register');
+            const loginForm = document.getElementById('auth-login-form');
+            const registerForm = document.getElementById('auth-register-form');
+            loginTab.classList.toggle('tab-active', tab === 'login');
+            registerTab.classList.toggle('tab-active', tab === 'register');
+            loginForm.style.display = tab === 'login' ? 'block' : 'none';
+            registerForm.style.display = tab === 'register' ? 'block' : 'none';
+            hideAuthError();
+        }
+
+        async function checkAdminAuth() {
+            const token = localStorage.getItem('admin_token');
+            if (!token) { showAuthOverlay(); return false; }
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) { localStorage.removeItem('admin_token'); showAuthOverlay(); return false; }
+                const data = await res.json();
+                if (data.role !== 'admin') { localStorage.removeItem('admin_token'); showAuthOverlay(); return false; }
+                currentAdmin = { user_id: data.user_id, username: data.username, role: data.role };
+                hideAuthOverlay();
+                updateAdminHeader();
+                return true;
+            } catch (e) {
+                showAuthOverlay();
+                return false;
+            }
+        }
+
+        function showAuthOverlay() {
+            document.getElementById('auth-overlay').classList.remove('hidden');
+            document.getElementById('admin-logout-btn').style.display = 'none';
+        }
+
+        function hideAuthOverlay() {
+            document.getElementById('auth-overlay').classList.add('hidden');
+        }
+
+        function updateAdminHeader() {
+            if (currentAdmin) {
+                document.getElementById('admin-username-display').textContent = currentAdmin.username;
+                document.getElementById('admin-logout-btn').style.display = 'inline-block';
+            }
+        }
+
+        async function handleAdminLogin() {
+            hideAuthError();
+            const username = document.getElementById('admin-login-username').value.trim();
+            const password = document.getElementById('admin-login-password').value;
+            if (!username || !password) { showAuthError('请输入用户名和密码'); return; }
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (!res.ok) { showAuthError(data.detail || '登录失败'); return; }
+                if (data.role !== 'admin') {
+                    showAuthError('此账户无管理员权限，请使用管理员账户登录');
+                    return;
+                }
+                localStorage.setItem('admin_token', data.access_token);
+                currentAdmin = { user_id: data.user_id, username: data.username, role: data.role };
+                hideAuthOverlay();
+                updateAdminHeader();
+                showNotification('登录成功', 'success');
+                if (!appInitialized) { initApp(); }
+            } catch (e) {
+                showAuthError('网络连接失败');
+            }
+        }
+
+        async function handleAdminRegister() {
+            hideAuthError();
+            const username = document.getElementById('admin-reg-username').value.trim();
+            const password = document.getElementById('admin-reg-password').value;
+            const passwordConfirm = document.getElementById('admin-reg-password-confirm').value;
+            const vehicleId = document.getElementById('admin-reg-vehicle-id').value.trim();
+            if (!username || !password) { showAuthError('请输入用户名和密码'); return; }
+            if (username.length < 2) { showAuthError('用户名至少2个字符'); return; }
+            if (password.length < 4) { showAuthError('密码至少4位'); return; }
+            if (password !== passwordConfirm) { showAuthError('两次密码不一致'); return; }
+            try {
+                const body = { username, password };
+                if (vehicleId) body.vehicle_id = vehicleId;
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) { showAuthError(data.detail || '注册失败'); return; }
+                showAuthError('注册成功！但新用户为普通用户，无管理员权限。请使用管理员账户登录。');
+                switchAuthTab('login');
+            } catch (e) {
+                showAuthError('网络连接失败');
+            }
+        }
+
+        function handleAdminLogout() {
+            localStorage.removeItem('admin_token');
+            currentAdmin = null;
+            document.getElementById('admin-username-display').textContent = '--';
+            document.getElementById('admin-logout-btn').style.display = 'none';
+            if (pollIntervalId) { clearInterval(pollIntervalId); pollIntervalId = null; }
+            showAuthOverlay();
+            showNotification('已退出登录', 'success');
+        }
+
+        function initApp() {
+            if (appInitialized) return;
+            appInitialized = true;
+            initCharts();
+            poll();
+            loadClock(false);
+            loadAcceptanceSnapshot(false);
+            pollIntervalId = setInterval(poll, 1000);
+        }
 
         function formatDuration(seconds) {
             const hours = Math.floor(seconds / 3600);
@@ -1712,12 +1935,11 @@
             exportFile(type, 'csv');
         }
 
-        window.onload = function() {
-            initCharts();
-            poll();
-            loadClock(false);
-            loadAcceptanceSnapshot(false);
-            setInterval(poll, 1000);
+        window.onload = async function() {
+            const authed = await checkAdminAuth();
+            if (authed) {
+                initApp();
+            }
         };
     </script>
 </body>
