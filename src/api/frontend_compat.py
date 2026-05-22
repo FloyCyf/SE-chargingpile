@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy import select
 from src.models.database import AsyncSessionLocal
 from src.models.models import ChargeOrder, Vehicle
@@ -31,27 +32,50 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
     scheduler = request.app.state.scheduler
     status = scheduler.get_system_status()
     qdata = scheduler.get_waiting_area()
-    
+
     for idx, q in enumerate(qdata.get("fast_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
+            # 估算等待时间：该位置之前的所有车辆充电时间 / 同类型可用桩数
+            ahead = idx
+            avg_power = scheduler.fast_power
+            fast_idle = sum(1 for p in status.get("piles", [])
+                           if p["type"] == "Fast" and p["status"] == "IDLE")
+            fast_charging = sum(1 for p in status.get("piles", [])
+                               if p["type"] == "Fast" and p["status"] == "CHARGING")
+            active_fast = max(fast_charging, 1)
+            # 粗估：前方每辆车平均30kWh，按桩功率除以活跃桩数
+            est_min = int(ahead * 30.0 / avg_power * 60 / active_fast) if ahead > 0 else int(30.0 / avg_power * 60 / active_fast)
             return {"status": "WAITING", "area": "等候区", "area_detail": "快充等候队列第" + str(idx+1) + "位",
-                    "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "15"}
-            
+                    "queue_id": "F", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": str(est_min)}
+
     for idx, q in enumerate(qdata.get("slow_waiting", [])):
         if q["vehicle_id"] == vehicle_id:
+            ahead = idx
+            avg_power = scheduler.slow_power
+            slow_charging = sum(1 for p in status.get("piles", [])
+                               if p["type"] == "Slow" and p["status"] == "CHARGING")
+            active_slow = max(slow_charging, 1)
+            est_min = int(ahead * 30.0 / avg_power * 60 / active_slow) if ahead > 0 else int(30.0 / avg_power * 60 / active_slow)
             return {"status": "WAITING", "area": "等候区", "area_detail": "慢充等候队列第" + str(idx+1) + "位",
-                    "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "30"}
-            
+                    "queue_id": "T", "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": str(est_min)}
+
     for p in status.get("piles", []):
         for idx, q in enumerate(p.get("queue_items", [])):
             if q["vehicle_id"] == vehicle_id:
                 state = "CHARGING" if idx == 0 and p["status"] == "CHARGING" else "QUEUING"
                 if state == "CHARGING":
                     area_detail = "正在 " + p["pile_id"] + " 充电中"
+                    est_min = 0
                 else:
                     area_detail = p["pile_id"] + " 队列第" + str(idx+1) + "位等待"
+                    # 计算前方车辆的剩余充电时间之和
+                    est_min = 0
+                    for j in range(idx):
+                        car = p["queue_items"][j]
+                        remaining_kwh = car.get("requested_kwh", 30) - car.get("charged_kwh", 0)
+                        est_min += int(remaining_kwh / p.get("power", 30) * 60)
                 return {"status": state, "area": "充电区", "area_detail": area_detail,
-                        "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": "0"}
+                        "queue_id": p["pile_id"], "queue_position": idx, "order_id": q["order_id"], "estimated_wait_time": str(est_min)}
     
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -64,6 +88,32 @@ async def get_vehicle_status(vehicle_id: str, request: Request):
                     "order_id": order.id, "queue_id": order.pile_id, "queue_position": 0, "estimated_wait_time": "-"}
             
     raise HTTPException(404, "Vehicle not found")
+
+class ModifyReqBody(BaseModel):
+    vehicle_id: str
+    charge_type: Optional[str] = None
+    requested_kwh: Optional[float] = None
+
+@router.post("/user/charge/modify")
+async def modify_charge(body: ModifyReqBody, request: Request):
+    """修改充电请求（仅等候区可修改，无需认证）"""
+    scheduler = request.app.state.scheduler
+    qdata = scheduler.get_waiting_area()
+    oid = None
+    for q in qdata.get("fast_waiting", []):
+        if q["vehicle_id"] == body.vehicle_id: oid = q["order_id"]
+    for q in qdata.get("slow_waiting", []):
+        if q["vehicle_id"] == body.vehicle_id: oid = q["order_id"]
+    if not oid:
+        raise HTTPException(status_code=400, detail="车辆不在等候区，无法修改")
+    result = await scheduler.modify_request(
+        oid,
+        new_charge_type=body.charge_type,
+        new_requested_kwh=body.requested_kwh,
+    )
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
 
 class CancelReqBody(BaseModel):
     vehicle_id: str

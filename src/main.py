@@ -24,8 +24,8 @@ async def lifespan(app: FastAPI):
     print("[Lifecycle] Initializing billing config from config.yaml...")
     init_billing_config(config_data)
 
-    print("[Lifecycle] Restoring in-progress orders from database...")
-    await app.state.scheduler.restore_from_db()
+    print("[Lifecycle] Clearing unfinished orders from database...")
+    await app.state.scheduler.clear_unfinished_orders()
 
     print("[Lifecycle] Starting background tasks...")
     sim_task = asyncio.create_task(

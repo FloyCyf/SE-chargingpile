@@ -239,15 +239,13 @@ class SmartScheduler:
     async def submit_request(self, request: ChargeRequest,
                              user_id: Optional[int] = None) -> dict:
         async with self.lock:
-            # 容量检查: 所有桩队列中的车 + 等候区中的车
-            cars_in_piles = sum(len(p.queue) for p in self.piles)
+            # 容量检查: 等候区车辆数不能超过等候区容量
             cars_in_waiting = (
                 len(self.fast_waiting) + len(self.slow_waiting)
                 + len(self.fast_fault_waiting) + len(self.slow_fault_waiting)
             )
-            total_cars = cars_in_piles + cars_in_waiting
 
-            if total_cars >= self.waiting_capacity:
+            if cars_in_waiting >= self.waiting_capacity:
                 return {"status": "rejected", "message": "系统已满，拒绝接纳",
                         "order_id": None, "queue_number": None,
                         "queue_position": None, "assigned_pile": None}
@@ -833,9 +831,11 @@ class SmartScheduler:
 
             current_vtime = self.clock.get_time()
             displaced_cars = []
+            finished_count = 0
 
             # 正在充电的车（position 0）→ 停止计费，生成账单
             if len(pile.queue) > 0 and pile.status == "CHARGING":
+                finished_count = 1
                 await self._finish_charging(
                     pile, current_vtime, status=OrderStatus.FAULTED)
 
@@ -861,9 +861,15 @@ class SmartScheduler:
             if duration_minutes is not None and duration_minutes > 0:
                 self._schedule_auto_recover(pile_id, float(duration_minutes))
 
+            total_affected = finished_count + len(displaced_cars)
+            parts = []
+            if finished_count > 0:
+                parts.append(f"{finished_count}辆已结算（故障中断）")
+            if displaced_cars:
+                parts.append(f"{len(displaced_cars)}辆已重新调度")
+            detail = "，".join(parts) if parts else "无车辆受影响"
             return {"status": "success",
-                    "message": f"充电桩 {pile_id} 已置为故障，"
-                               f"已调度 {len(displaced_cars)} 辆车",
+                    "message": f"充电桩 {pile_id} 已置为故障，{detail}",
                     "pile_id": pile_id}
 
     def _schedule_auto_recover(self, pile_id: str, duration_minutes: float):
@@ -1260,6 +1266,30 @@ class SmartScheduler:
                     pass
 
         print(f"[Restore] 排队号计数器: Fast={self.fast_counter}, Slow={self.slow_counter}")
+
+    async def clear_unfinished_orders(self):
+        """
+        将数据库中所有未完成订单（CHARGING/QUEUING/WAITING）
+        标记为 CANCELLED，避免重启时恢复到内存队列。
+        """
+        from sqlalchemy import update as sa_update
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                sa_update(ChargeOrder)
+                .where(ChargeOrder.status.in_([
+                    OrderStatus.CHARGING,
+                    OrderStatus.QUEUING,
+                    OrderStatus.WAITING,
+                ]))
+                .values(status=OrderStatus.CANCELLED)
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            count = result.rowcount
+            if count > 0:
+                print(f"[Startup] 已清除 {count} 笔未完成订单（标记为 CANCELLED）")
+            else:
+                print("[Startup] 无未完成订单需要清除")
 
     # ------------------------------------------------------------------
     #  查询方法

@@ -308,7 +308,11 @@
 
                 <!-- 当前状态 -->
                 <div class="mt-6 pt-6 border-t border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-3">当前状态</h3>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-semibold text-gray-800">当前状态</h3>
+                        <select id="vehicle-selector" onchange="switchVehicle(this.value)" class="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" style="display:none">
+                        </select>
+                    </div>
                     <div id="current-status" class="text-center py-8 text-gray-500">
                         暂无充电任务
                     </div>
@@ -318,14 +322,27 @@
             <!-- 中间：等候区 -->
             <div class="card bg-white rounded-lg p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-semibold text-gray-800">⏳ 等候区</h2>
-                    <div class="text-sm text-gray-500">
-                        总车辆: <span id="queue-total" class="font-semibold text-gray-800">0</span>
+                    <h2 class="text-lg font-semibold text-gray-800">⏳ 排队等候</h2>
+                    <div class="flex items-center space-x-3">
+                        <div class="text-sm text-gray-500">
+                            快充: <span id="fast-queue-count" class="font-semibold text-orange-600">0</span>辆
+                            慢充: <span id="slow-queue-count" class="font-semibold text-blue-600">0</span>辆
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            总计: <span id="queue-total" class="font-semibold text-gray-800">0</span>辆
+                        </div>
                     </div>
                 </div>
-                <div id="queue-list" class="space-y-2 max-h-96 overflow-y-auto">
-                    <div class="text-center py-8 text-gray-500">
-                        等候区暂无车辆
+                <div class="mb-3">
+                    <h4 class="text-sm font-medium text-gray-600 mb-2">⚡ 快充等候</h4>
+                    <div id="fast-queue-list" class="space-y-2 max-h-44 overflow-y-auto">
+                        <div class="text-center py-3 text-gray-400 text-sm">暂无车辆</div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-sm font-medium text-gray-600 mb-2">🔌 慢充等候</h4>
+                    <div id="slow-queue-list" class="space-y-2 max-h-44 overflow-y-auto">
+                        <div class="text-center py-3 text-gray-400 text-sm">暂无车辆</div>
                     </div>
                 </div>
             </div>
@@ -496,17 +513,62 @@
                     <p class="text-gray-600 text-sm">显示当前等候车辆，F开头为快充队列，T开头为慢充队列</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-800">3. 充电详单</h3>
+                    <h3 class="font-semibold text-gray-800">3. 修改请求</h3>
+                    <p class="text-gray-600 text-sm">在等候区中的车辆可以修改充电模式或充电量</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">4. 充电详单</h3>
                     <p class="text-gray-600 text-sm">查看历史充电记录和当前充电详情</p>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-800">4. 充电区状态</h3>
+                    <h3 class="font-semibold text-gray-800">5. 充电区状态</h3>
                     <p class="text-gray-600 text-sm">实时显示充电桩状态，绿色为充电中，灰色为空闲，红色为故障</p>
                 </div>
             </div>
             <button onclick="closeHelp()" class="btn-primary w-full py-3 text-white rounded-lg font-medium mt-6">
                 我知道了
             </button>
+        </div>
+    </div>
+
+    <!-- 修改请求弹窗 -->
+    <div id="modifyModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl p-8 w-full max-w-md shadow-xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">修改充电请求</h2>
+                <button onclick="closeModifyModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700">
+                    仅在等候区中的车辆可以修改充电请求，已进入充电区的车辆请先取消再重新提交。
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">当前车辆</label>
+                    <div id="modify-vehicle-id" class="px-4 py-2 bg-gray-100 rounded-lg text-sm text-gray-700 font-medium">--</div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-2">新充电模式</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="modify-btn-fast" onclick="setModifyMode('Fast')" class="btn-primary py-3 text-white rounded-lg font-medium">
+                            ⚡ 快充
+                        </button>
+                        <button id="modify-btn-slow" onclick="setModifyMode('Slow')" class="btn-secondary py-3 text-white rounded-lg font-medium">
+                            🔌 慢充
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-2">新充电量 (度)</label>
+                    <input type="number" id="modify-capacity" step="0.1" min="1" max="200" value="30" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" placeholder="请输入充电量">
+                </div>
+                <button onclick="submitModifyRequest()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                    确认修改
+                </button>
+            </div>
         </div>
     </div>
 
@@ -519,6 +581,9 @@
         let vehicleBatteryCap = 60;
         let vehicleCurrentKwh = 0;
         let currentUser = null; // {user_id, username, role, vehicle_id}
+        let myVehicles = []; // 当前用户提交过的所有车辆ID列表
+        let modifyMode = 'Fast'; // 修改弹窗中的模式选择
+        let lastQueueData = { fast: [], slow: [] }; // 缓存等候区数据
 
         // ---- 认证相关 ----
         function setAuthState(user) {
@@ -843,7 +908,12 @@
                 showNotification('充电请求已提交成功！', 'success');
                 
                 currentVehicleId = vehicleId;
-                document.getElementById('current-user').textContent = vehicleId;
+                // 添加到我的车辆列表
+                if (!myVehicles.includes(vehicleId)) {
+                    myVehicles.push(vehicleId);
+                    updateVehicleSelector();
+                }
+                document.getElementById('current-user').textContent = currentUser ? currentUser.username : vehicleId;
                 await updateCurrentStatus();
             } catch (error) {
                 console.error('Error submitting charge request:', error);
@@ -857,7 +927,10 @@
         async function updateCurrentStatus() {
             try {
                 const vehicleId = currentVehicleId;
-                if (!vehicleId) return;
+                if (!vehicleId) {
+                    document.getElementById('current-status').innerHTML = '<div class="text-center py-8 text-gray-500">暂无充电任务</div>';
+                    return;
+                }
                 
                 const response = await axios.get(`/api/user/vehicle/status/${vehicleId}`);
                 const data = response.data;
@@ -869,6 +942,7 @@
                     '已离开': 'background:rgba(136,163,136,0.3);color:#6e896e;border:1px solid rgba(136,163,136,0.5)',
                 };
                 const areaStyle = areaBadgeColor[data.area] || 'background:#eee;color:#666';
+                const isWaiting = data.area === '等候区';
                 const statusHtml = `
                     <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
                         <div class="flex justify-between items-center mb-2">
@@ -889,9 +963,10 @@
                             <p>前车等待: <span class="text-orange-500 font-semibold">${data.queue_position || 0}辆</span></p>
                             <p>预计等待: <span class="text-blue-600 font-semibold">${data.estimated_wait_time || '0'}分钟</span></p>
                         </div>
-                        <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
-                            取消充电
-                        </button>
+                        <div class="flex gap-2 mt-3">
+                            ${isWaiting ? '<button onclick="showModifyModal()" class="btn-primary flex-1 py-2 text-sm text-white rounded-lg">修改请求</button>' : ''}
+                            <button onclick="cancelChargeRequest()" class="btn-secondary flex-1 py-2 text-sm text-white rounded-lg">取消充电</button>
+                        </div>
                     </div>
                 `;
                 document.getElementById('current-status').innerHTML = statusHtml;
@@ -925,6 +1000,96 @@
             }
         }
 
+        // ---- 修改充电请求 ----
+        function showModifyModal() {
+            if (!currentVehicleId) {
+                showNotification('请先选择要修改的车辆', 'error');
+                return;
+            }
+            document.getElementById('modify-vehicle-id').textContent = currentVehicleId;
+            // 从等候区缓存获取当前车辆的信息
+            const allWaiting = [...lastQueueData.fast, ...lastQueueData.slow];
+            const myItem = allWaiting.find(q => q.vehicle_id === currentVehicleId);
+            if (myItem) {
+                document.getElementById('modify-capacity').value = myItem.requested_capacity || 30;
+                modifyMode = myItem.queue_id && myItem.queue_id.startsWith('T') ? 'Slow' : 'Fast';
+            } else {
+                modifyMode = chargeMode;
+            }
+            setModifyMode(modifyMode);
+            document.getElementById('modifyModal').style.display = 'flex';
+        }
+
+        function closeModifyModal() {
+            document.getElementById('modifyModal').style.display = 'none';
+        }
+
+        function setModifyMode(mode) {
+            modifyMode = mode;
+            const fastBtn = document.getElementById('modify-btn-fast');
+            const slowBtn = document.getElementById('modify-btn-slow');
+            if (mode === 'Fast') {
+                fastBtn.classList.remove('btn-secondary');
+                fastBtn.classList.add('btn-primary');
+                slowBtn.classList.remove('btn-primary');
+                slowBtn.classList.add('btn-secondary');
+            } else {
+                slowBtn.classList.remove('btn-secondary');
+                slowBtn.classList.add('btn-primary');
+                fastBtn.classList.remove('btn-primary');
+                fastBtn.classList.add('btn-secondary');
+            }
+        }
+
+        async function submitModifyRequest() {
+            const newCapacity = parseFloat(document.getElementById('modify-capacity').value);
+            if (!newCapacity || newCapacity <= 0) {
+                showNotification('请输入有效的充电量', 'error');
+                return;
+            }
+            try {
+                const payload = {
+                    vehicle_id: currentVehicleId,
+                    charge_type: modifyMode,
+                    requested_kwh: newCapacity
+                };
+                const res = await axios.post('/api/user/charge/modify', payload);
+                showNotification('充电请求已修改成功！', 'success');
+                closeModifyModal();
+                // 切换到新模式
+                chargeMode = modifyMode;
+                setChargeMode(chargeMode);
+                document.getElementById('capacity').value = newCapacity;
+                await updateCurrentStatus();
+                await loadQueueList();
+            } catch (error) {
+                console.error('Error modifying charge request:', error);
+                showNotification(error.response?.data?.detail || '修改失败，请重试', 'error');
+            }
+        }
+
+        // ---- 车辆切换 ----
+        function updateVehicleSelector() {
+            const selector = document.getElementById('vehicle-selector');
+            if (myVehicles.length <= 1) {
+                selector.style.display = 'none';
+                return;
+            }
+            selector.style.display = 'inline-block';
+            selector.innerHTML = myVehicles.map(v =>
+                `<option value="${v}" ${v === currentVehicleId ? 'selected' : ''}>${v}</option>`
+            ).join('');
+        }
+
+        function switchVehicle(vehicleId) {
+            if (!vehicleId || vehicleId === currentVehicleId) return;
+            currentVehicleId = vehicleId;
+            document.getElementById('vid').value = vehicleId;
+            loadVehicleInfo(vehicleId);
+            updateCurrentStatus();
+            loadDetails('current');
+        }
+
         function showTab(tab) {
             const historyTab = document.getElementById('tab-history');
             const currentTab = document.getElementById('tab-current');
@@ -942,7 +1107,7 @@
 
         async function loadDetails(type) {
             try {
-                const vehicleId = document.getElementById('vid').value;
+                const vehicleId = currentVehicleId || document.getElementById('vid').value;
                 if (!vehicleId) {
                     document.getElementById('detail-list').innerHTML = '<div class="text-center py-8 text-gray-500">请输入车牌号以查看详情</div>';
                     return;
@@ -1031,39 +1196,127 @@
 
         async function loadQueueList() {
             try {
-                const response = await axios.get('/api/queue/list');
-                const queue = response.data;
-                
-                const fastQueue = queue.filter(q => q.queue_id.startsWith('F'));
-                const slowQueue = queue.filter(q => q.queue_id.startsWith('T'));
+                // 获取等候区车辆
+                const queueResp = await axios.get('/api/queue/list');
+                const waitingQueue = queueResp.data;
 
-                document.getElementById('queue-total').textContent = queue.length;
+                // 获取充电桩状态，提取桩队列中的排队车辆（非充电位）
+                const pileResp = await axios.get('/api/pile/status');
+                const piles = pileResp.data;
 
-                let html = '';
+                const fastPileQueued = [];
+                const slowPileQueued = [];
+                piles.forEach(p => {
+                    const isFast = (p.pile_id || '').startsWith('F');
+                    // pileResp 不含详细 queue_items，需要从 compat/dump 获取
+                });
 
-                if (chargeMode === 'Fast') {
-                    html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-                        <div class="text-gray-600">前方等待</div>
-                        <div class="text-3xl font-bold text-blue-600 my-2">${fastQueue.length}</div>
-                        <div class="text-gray-500 text-sm">辆快充车辆</div>
-                    </div>`;
+                // 用 compat/dump 获取完整桩队列信息
+                const dumpResp = await axios.get('/api/compat/dump');
+                const dumpData = dumpResp.data;
+
+                const fastFromPiles = [];
+                const slowFromPiles = [];
+                dumpData.piles.forEach(p => {
+                    const isFast = p.type === 'Fast';
+                    const items = p.queue_items || [];
+                    items.forEach((q, idx) => {
+                        if (idx === 0 && p.status === 'CHARGING') return; // 正在充电的不算等候
+                        const entry = {
+                            queue_id: p.pile_id,
+                            vehicle_id: q.vehicle_id,
+                            requested_capacity: q.requested_kwh,
+                            charged_kwh: q.charged_kwh,
+                            pile_position: idx + 1,
+                            pile_id: p.pile_id,
+                            is_pile_queue: true
+                        };
+                        if (isFast) fastFromPiles.push(entry);
+                        else slowFromPiles.push(entry);
+                    });
+                });
+
+                // 合并：等候区车辆 + 桩队列排队车辆
+                const fastWaiting = waitingQueue.filter(q => q.queue_id.startsWith('F')).map(q => ({
+                    ...q, pile_id: null, pile_position: null, is_pile_queue: false
+                }));
+                const slowWaiting = waitingQueue.filter(q => q.queue_id.startsWith('T')).map(q => ({
+                    ...q, pile_id: null, pile_position: null, is_pile_queue: false
+                }));
+
+                const fastAll = [...fastFromPiles, ...fastWaiting];
+                const slowAll = [...slowFromPiles, ...slowWaiting];
+
+                lastQueueData = { fast: fastAll, slow: slowAll };
+
+                document.getElementById('queue-total').textContent = fastAll.length + slowAll.length;
+                document.getElementById('fast-queue-count').textContent = fastAll.length;
+                document.getElementById('slow-queue-count').textContent = slowAll.length;
+
+                // 快充等候列表
+                const fastListEl = document.getElementById('fast-queue-list');
+                if (fastAll.length === 0) {
+                    fastListEl.innerHTML = '<div class="text-center py-3 text-gray-400 text-sm">暂无车辆</div>';
                 } else {
-                    html = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-                        <div class="text-gray-600">前方等待</div>
-                        <div class="text-3xl font-bold text-blue-600 my-2">${slowQueue.length}</div>
-                        <div class="text-gray-500 text-sm">辆慢充车辆</div>
-                    </div>`;
+                    fastListEl.innerHTML = fastAll.map((q, i) => {
+                        const isMyVehicle = currentVehicleId === q.vehicle_id;
+                        const locTag = q.is_pile_queue
+                            ? '<span class="text-xs text-blue-500">' + q.pile_id + ' #' + q.pile_position + '位</span>'
+                            : '<span class="badge badge-fast text-xs">' + q.queue_id + '</span>';
+                        const chargedInfo = q.is_pile_queue && q.charged_kwh > 0
+                            ? '<span class="text-xs text-green-500">已充' + q.charged_kwh.toFixed(1) + '</span>'
+                            : '';
+                        return `
+                        <div class="flex items-center justify-between p-3 rounded-lg border ${isMyVehicle ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'} hover:shadow-sm transition-shadow">
+                            <div class="flex items-center space-x-2">
+                                ${locTag}
+                                <span class="text-sm font-medium text-gray-800">${q.vehicle_id}</span>
+                                <span class="text-xs text-gray-400">${q.requested_capacity}kWh</span>
+                                ${chargedInfo}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                ${isMyVehicle ? '<span class="text-xs text-blue-600 font-medium">我的车</span>' : ''}
+                                ${isMyVehicle && !q.is_pile_queue ? '<button onclick="showModifyModal()" class="text-xs text-purple-600 hover:text-purple-800 font-medium">修改</button>' : ''}
+                            </div>
+                        </div>`;
+                    }).join('');
                 }
 
-                document.getElementById('queue-list').innerHTML = html;
+                // 慢充等候列表
+                const slowListEl = document.getElementById('slow-queue-list');
+                if (slowAll.length === 0) {
+                    slowListEl.innerHTML = '<div class="text-center py-3 text-gray-400 text-sm">暂无车辆</div>';
+                } else {
+                    slowListEl.innerHTML = slowAll.map((q, i) => {
+                        const isMyVehicle = currentVehicleId === q.vehicle_id;
+                        const locTag = q.is_pile_queue
+                            ? '<span class="text-xs text-blue-500">' + q.pile_id + ' #' + q.pile_position + '位</span>'
+                            : '<span class="badge badge-slow text-xs">' + q.queue_id + '</span>';
+                        const chargedInfo = q.is_pile_queue && q.charged_kwh > 0
+                            ? '<span class="text-xs text-green-500">已充' + q.charged_kwh.toFixed(1) + '</span>'
+                            : '';
+                        return `
+                        <div class="flex items-center justify-between p-3 rounded-lg border ${isMyVehicle ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'} hover:shadow-sm transition-shadow">
+                            <div class="flex items-center space-x-2">
+                                ${locTag}
+                                <span class="text-sm font-medium text-gray-800">${q.vehicle_id}</span>
+                                <span class="text-xs text-gray-400">${q.requested_capacity}kWh</span>
+                                ${chargedInfo}
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                ${isMyVehicle ? '<span class="text-xs text-blue-600 font-medium">我的车</span>' : ''}
+                                ${isMyVehicle && !q.is_pile_queue ? '<button onclick="showModifyModal()" class="text-xs text-purple-600 hover:text-purple-800 font-medium">修改</button>' : ''}
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
             } catch (error) {
                 console.error('Error fetching queue list:', error);
                 document.getElementById('queue-total').textContent = '0';
-                document.getElementById('queue-list').innerHTML = `<div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-                    <div class="text-gray-600">系统未连接或暂无排队</div>
-                    <div class="text-3xl font-bold text-blue-600 my-2">0</div>
-                    <div class="text-gray-500 text-sm">辆等候车辆</div>
-                </div>`;
+                document.getElementById('fast-queue-count').textContent = '0';
+                document.getElementById('slow-queue-count').textContent = '0';
+                document.getElementById('fast-queue-list').innerHTML = '<div class="text-center py-3 text-gray-400 text-sm">无法获取</div>';
+                document.getElementById('slow-queue-list').innerHTML = '<div class="text-center py-3 text-gray-400 text-sm">无法获取</div>';
             }
         }
 
@@ -1189,7 +1442,7 @@
         let lastVehicleState = null;
 
         async function checkVehicleStatus() {
-            const vehicleId = document.getElementById('vid').value;
+            const vehicleId = currentVehicleId;
             if (!vehicleId) {
                 lastVehicleState = null;
                 return;
@@ -1216,6 +1469,9 @@
                 }
                 
                 lastVehicleState = data.status;
+
+                // 同步刷新当前状态区域
+                await updateCurrentStatus();
             } catch (e) {
                 // 静默忽略，继续轮询
             }
