@@ -1,10 +1,12 @@
+import os
 import hashlib
 from sqlalchemy import select
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from src.models.models import Base, ChargingPile, User
 
-DB_PATH = "sqlite+aiosqlite:///./charging.db"
+_db_file = os.environ.get("SCS_DB_PATH", "./charging.db")
+DB_PATH = f"sqlite+aiosqlite:///{_db_file}"
 
 engine = create_async_engine(
     DB_PATH,
