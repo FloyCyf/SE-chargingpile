@@ -123,15 +123,15 @@
         }
 
         .badge-charging {
-            background-color: rgba(228, 232, 235, 0.7);
-            color: #4d6273;
-            border: 1px solid rgba(77, 98, 115, 0.3);
+            background-color: rgba(34, 197, 94, 0.15);
+            color: #16a34a;
+            border: 1px solid rgba(34, 197, 94, 0.4);
         }
 
         .badge-fault {
-            background-color: rgba(248, 244, 244, 0.7);
-            color: #ad7272;
-            border: 1px solid rgba(173, 114, 114, 0.3);
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.4);
         }
 
         .tab-active {
@@ -304,7 +304,49 @@
     </style>
 </head>
 <body class="min-h-screen">
-    <div class="loading-bar"></div>
+    <!-- 登录界面 -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">调度监控枢纽中心</h1>
+                <p class="text-gray-500 mt-2">请输入管理员账号密码</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                    <input type="text" id="username" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="请输入用户名">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="password" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="请输入密码">
+                </div>
+                <div id="login-error" class="text-red-500 text-sm hidden">用户名或密码错误</div>
+                <button type="submit"
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                    登录
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center text-sm text-gray-500">
+                <p>默认账号: admin</p>
+                <p>默认密码: admin123</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="main-screen" class="hidden">
+        <div class="loading-bar"></div>
 
     <header class="bg-white shadow-sm">
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -338,6 +380,9 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
+                </button>
+                <button onclick="logout()" class="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors">
+                    退出登录
                 </button>
             </div>
         </div>
@@ -859,6 +904,86 @@
             }, 3000);
         }
 
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    document.getElementById('login-error').classList.remove('hidden');
+                    return;
+                }
+                
+                localStorage.setItem('admin_logged_in', 'true');
+                localStorage.setItem('admin_token', data.access_token);
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('hidden');
+                initCharts();
+                poll();
+                loadClock(false, true);
+                loadAcceptanceSnapshot(false);
+                loadSystemParams();
+                setInterval(poll, 1000);
+                setInterval(() => loadClock(false), 1000);
+            } catch (e) {
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('admin_logged_in');
+            localStorage.removeItem('admin_token');
+            window.location.reload();
+        }
+
+        async function loadSystemParams() {
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/system-params', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const params = await res.json();
+                if (params.pile_queue_length) {
+                    const input = document.getElementById('pile-queue-length');
+                    if (input) input.value = params.pile_queue_length;
+                }
+            } catch (e) {
+                console.error('Error loading system params:', e);
+            }
+        }
+
+        async function savePileSettings() {
+            const queueLength = document.getElementById('pile-queue-length').value;
+            try {
+                const token = localStorage.getItem('admin_token') || '';
+                const res = await fetch('/api/admin/system-params', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ pile_queue_length: parseInt(queueLength) })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || data.message || '设置失败');
+                }
+                showNotification(data.message || '设置成功', 'success');
+                await poll();
+            } catch (e) {
+                showNotification(e.message || '设置失败', 'error');
+            }
+        }
+
         function showTab(tab) {
             const monitorTab = document.getElementById('tab-monitor');
             const reportTab = document.getElementById('tab-report');
@@ -1163,36 +1288,101 @@
         function renderPileCard(p) {
             const isCharging = p.status === 'CHARGING';
             const isFault = p.status === 'FAULT';
-            const socPercent = isCharging ? Math.min(100, Math.floor(Number(p.current_soc || 0) * 100)) : 0;
-            const targetPercent = Math.floor(Number(p.target_soc || 0) * 100);
+            const queueItems = p.queue_items || [];
+            const chargingCar = queueItems.find(item => item.position === 0);
+            const queuingCars = queueItems.filter(item => item.position > 0);
             const power = p.power || (p.type === 'Fast' ? 30 : 10);
+            
+            const maxQueueLen = p.max_queue_len || p.max_queue_length || 3;
+            const maxWaitingSpots = maxQueueLen - 1;
+
+            const pileBgClass = isFault ? 'bg-red-200' : isCharging ? 'bg-green-200' : 'bg-white';
+            const pileBorderClass = isFault ? 'border-red-500' : isCharging ? 'border-green-500' : 'border-gray-300';
+
+            let chargingHtml = `
+                <div class="flex flex-col items-center justify-center h-24 border border-gray-300 rounded-lg bg-gray-100">
+                    <svg class="w-10 h-10 text-gray-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <path d="M12 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span class="text-xs text-gray-400 mt-2">空闲</span>
+                </div>
+            `;
+
+            if (chargingCar) {
+                chargingHtml = `
+                    <div class="flex flex-col items-center justify-center h-24 border-2 border-green-600 rounded-lg bg-green-100">
+                        <img src="/green.png" alt="充电中" class="w-14 h-14 object-contain">
+                        <span class="text-xs font-medium text-green-800 mt-1">${chargingCar.vehicle_id}</span>
+                        <span class="text-xs text-green-700">充电中</span>
+                    </div>
+                `;
+            }
+
+            let waitingHtml = '';
+            for (let i = 1; i <= maxWaitingSpots; i++) {
+                const waitingCar = queuingCars.find(item => item.position === i);
+                if (waitingCar) {
+                    waitingHtml += `
+                        <div class="flex flex-col items-center justify-center h-24 border-2 border-gray-500 rounded-lg bg-gray-100">
+                            <img src="/grey.png" alt="排队中" class="w-14 h-14 object-contain">
+                            <span class="text-xs font-medium text-gray-700 mt-1">${waitingCar.vehicle_id}</span>
+                            <span class="text-xs text-gray-600">排队${i}</span>
+                        </div>
+                    `;
+                } else {
+                    waitingHtml += `
+                        <div class="flex flex-col items-center justify-center h-24 border border-gray-300 rounded-lg bg-gray-100">
+                            <svg class="w-10 h-10 text-gray-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                                <path d="M12 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="text-xs text-gray-400 mt-2">空闲</span>
+                        </div>
+                    `;
+                }
+            }
+
+            const waitingCols = maxWaitingSpots === 1 ? 'grid-cols-1' : maxWaitingSpots === 2 ? 'grid-cols-2' : 'grid-cols-3';
 
             return `
-                <div id="pile-${p.pile_id}" class="pile-card ${isCharging ? 'charging' : isFault ? 'fault' : ''} hover:shadow-md transition-shadow">
+                <div id="pile-${p.pile_id}" class="pile-card border-2 ${pileBorderClass} ${pileBgClass} hover:shadow-md transition-shadow">
                     <div class="flex justify-between items-center mb-3">
-                        <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
+                        <div class="flex items-center gap-2">
+                            ${p.type === 'Fast' ? `
+                                <svg class="w-6 h-6 text-orange-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+                                </svg>
+                            ` : `
+                                <svg class="w-6 h-6 text-gray-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="7" y="3" width="10" height="18" rx="2" fill="currentColor"/>
+                                    <path d="M10 9h4M12 7v6" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            `}
+                            <span class="font-bold text-lg text-gray-800">${p.pile_id}</span>
+                        </div>
                         <span class="badge ${statusBadgeClass(p.status)}">${statusLabel(p.status)}</span>
                     </div>
-                    ${isCharging ? `
-                        <div class="text-sm text-gray-600 mb-2">当前车辆：${p.vehicle_id || '-'}</div>
-                        <div class="mb-2">
-                            <div class="flex justify-between text-xs mb-1">
-                                <span class="text-gray-400">充电进度</span>
-                                <span class="text-blue-600">${socPercent}% / ${targetPercent}%</span>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-2">
-                                <div class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: ${socPercent}%"></div>
-                            </div>
-                        </div>
-                        <div class="text-xs text-gray-400">功率：${power} kW</div>
-                        <button onclick="faultPile('${p.pile_id}')" class="btn-danger w-full mt-3 py-2 text-xs text-white rounded-lg">设为故障</button>
-                    ` : isFault ? `
-                        <div class="text-sm text-red-500">故障中，等待恢复或持续时间结束后自动恢复。</div>
-                        <button onclick="resetPile('${p.pile_id}')" class="btn-success w-full mt-3 py-2 text-xs text-white rounded-lg">恢复充电桩</button>
-                    ` : `
-                        <div class="text-sm text-gray-400">当前空闲，可接收调度。</div>
-                        <button onclick="faultPile('${p.pile_id}')" class="btn-danger w-full mt-3 py-2 text-xs text-white rounded-lg">设为故障</button>
-                    `}
+
+                    <div class="text-xs text-gray-600 mb-3">功率：${power} kW | 队列容量：${maxQueueLen}（1充电+${maxWaitingSpots}等待）</div>
+
+                    <div class="mb-2">
+                        <div class="text-xs text-gray-600 mb-1 text-center">正在充电</div>
+                        ${chargingHtml}
+                    </div>
+
+                    <div class="grid ${waitingCols} gap-2">
+                        <div class="text-xs text-gray-600 mb-1 text-center col-span-full">等待充电</div>
+                        ${waitingHtml}
+                    </div>
+
+                    <div class="mt-3 flex gap-2">
+                        ${isFault ? `
+                            <button onclick="resetPile('${p.pile_id}')" class="btn-success flex-1 py-2 text-xs text-white rounded-lg">恢复充电桩</button>
+                        ` : `
+                            <button onclick="faultPile('${p.pile_id}')" class="btn-danger flex-1 py-2 text-xs text-white rounded-lg">设为故障</button>
+                        `}
+                    </div>
                 </div>
             `;
         }
@@ -1355,10 +1545,6 @@
 
         function resetPile(pileId) {
             controlPile(pileId, 'recover').catch(e => showNotification(e.message, 'error'));
-        }
-
-        function savePileSettings() {
-            showNotification('基础设置功能开发中', 'warning');
         }
 
         async function savePowerSettings() {
@@ -1792,13 +1978,22 @@
         }
 
         window.onload = function() {
-            initCharts();
-            poll();
-            loadClock(false, true);
-            loadAcceptanceSnapshot(false);
-            setInterval(poll, 1000);
-            setInterval(() => loadClock(false), 1000);
+            const loggedIn = localStorage.getItem('admin_logged_in');
+            if (loggedIn === 'true') {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('hidden');
+                initCharts();
+                poll();
+                loadClock(false, true);
+                loadAcceptanceSnapshot(false);
+                loadSystemParams();
+                setInterval(poll, 1000);
+                setInterval(() => loadClock(false), 1000);
+            } else {
+                document.getElementById('login-form').addEventListener('submit', handleLogin);
+            }
         };
     </script>
+    </div>
 </body>
 </html>

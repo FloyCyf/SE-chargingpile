@@ -209,11 +209,19 @@ class SmartScheduler:
     #  最短完成时间调度 — 选择最优桩
     # ------------------------------------------------------------------
 
+    # 桩选择容忍阈值(小时): 3分钟。两桩总完成时间差距在此之内时
+    # 启用负载均衡 tiebreaker, 避免浮点舍入导致确定性崩塌。
+    _PILE_SELECTION_TOLERANCE = 6.0 / 60.0  # 0.10 h (6 min, ~3 kWh @30kW)
+
     def _find_optimal_pile(self, charge_type: str,
                            requested_kwh: float) -> Optional[ChargingPile]:
         """
         在同类型非故障桩中，找到 *总完成时间最短* 的桩。
-        总时间 = 该桩现有队列剩余充电时间之和 + 本车充电时间
+        总时间 = 该桩现有队列剩余充电时间之和 + 本车充电时间。
+
+        二次排序 (负载均衡):
+          当两桩总时间差距在容忍阈值内时, 优先选队列较短的桩,
+          避免所有车挤到同一根桩上, 同时消除浮点舍入的不确定性。
         """
         candidates = [
             p for p in self.piles
@@ -224,13 +232,24 @@ class SmartScheduler:
 
         best_pile = None
         best_time = float('inf')
+        best_queue_len = float('inf')
         for pile in candidates:
             wait_time = pile.remaining_time_hours()
             own_time = requested_kwh / pile.power
             total = wait_time + own_time
-            if total < best_time:
+            qlen = len(pile.queue)
+
+            # 在容忍阈值外, 严格比总时间; 阈值内, 用队列长度打破平局
+            if total < best_time - self._PILE_SELECTION_TOLERANCE:
                 best_time = total
+                best_queue_len = qlen
                 best_pile = pile
+            elif total <= best_time + self._PILE_SELECTION_TOLERANCE:
+                # 近似平局 → 负载均衡: 队列短者优先
+                if qlen < best_queue_len:
+                    best_time = total
+                    best_queue_len = qlen
+                    best_pile = pile
         return best_pile
 
     # ------------------------------------------------------------------
@@ -333,8 +352,15 @@ class SmartScheduler:
                 }
 
             # 尝试直接分配到最优桩队列
+            # 【FIFO 修正】只有在该类型等候区为空且无故障队列时才允许直接进桩,
+            # 否则新车必须排到等候区末尾, 由 dispatch_watcher 按 FIFO 叫号.
+            # 这符合详细需求"选取等候区...第一辆车进入充电区"的语义.
+            same_type_waiting = (self.fast_waiting
+                                 if request.charge_type == "Fast"
+                                 else self.slow_waiting)
             optimal_pile = None
-            if not self._has_fault_waiting():
+            if (not self._has_fault_waiting()
+                    and len(same_type_waiting) == 0):
                 optimal_pile = self._find_optimal_pile(
                     request.charge_type, actual_requested)
 
@@ -403,29 +429,45 @@ class SmartScheduler:
                 await session.commit()
 
     # ------------------------------------------------------------------
-    #  后台电量模拟（每秒 tick）
+    #  后台电量模拟（每 0.2 真实秒 tick, 提高时间精度）
     # ------------------------------------------------------------------
 
     async def simulate_battery_growth(self):
         """后台任务：按虚拟时钟推进充电 kWh，充满后结算。
         双重停止条件：1) charged_kwh >= requested_kwh
                      2) 当前总电量达到电池最大容量
+
+        关键设计:
+          - tick 粒度 0.2s, 高 ratio 下也保证 ~0.2*ratio 虚拟分钟的电量精度.
+          - 增量按"实际虚拟时间差"计算, 不是 (tick * ratio), 避免 tick
+            被锁/DB 拖慢时累积漂移导致车辆延迟完成.
+          - cancel/stop/fault 触发时在 _finish_charging 内再按虚拟时间
+            精确补算 actual_kwh, 双重保险.
         """
+        last_tick_vtime = None
         while True:
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.2)
             async with self.lock:
                 current_vtime = self.clock.get_time()
                 if not self.clock.running:
+                    last_tick_vtime = current_vtime
                     continue
+                if last_tick_vtime is None:
+                    last_tick_vtime = current_vtime
+                    continue
+
+                # 实际经过的虚拟分钟数(自适应, 防止 tick 漂移)
+                elapsed_min = max(0.0,
+                    (current_vtime - last_tick_vtime).total_seconds() / 60.0)
+                last_tick_vtime = current_vtime
 
                 for pile in self.piles:
                     if pile.status != "CHARGING" or len(pile.queue) == 0:
                         continue
 
-                    car = pile.queue[0]  # position 0 = 正在充电
-                    # 每真实秒对应 virtual_ratio 虚拟分钟
-                    # kWh 增量 = power(kW) * 虚拟分钟数 / 60
-                    increment = pile.power * self.clock.ratio / 60.0
+                    car = pile.queue[0]
+                    # kWh 增量 = power(kW) * 经过的虚拟分钟 / 60(分/小时)
+                    increment = pile.power * elapsed_min / 60.0
                     car["charged_kwh"] += increment
                     car["charged_kwh"] = round(car["charged_kwh"], 4)
 
@@ -469,8 +511,29 @@ class SmartScheduler:
         # 弹出 position 0 的车
         finished_car = pile.queue.pop(0)
         bill_data = None
-        actual_kwh = min(finished_car["charged_kwh"],
-                         finished_car["requested_kwh"])
+
+        # 【精确补算】tick 粒度可能让 charged_kwh 比真实值低. 在结算前
+        # 按 charge_start_time 到 current_vtime 的精确虚拟时间重算 kWh.
+        # 对 cancel / stop / fault 触发场景尤其重要.
+        charge_start_in_mem = finished_car.get("charge_start_time")
+        if charge_start_in_mem is not None:
+            elapsed_hours = max(0.0,
+                (current_vtime - charge_start_in_mem).total_seconds() / 3600.0)
+            precise_kwh = elapsed_hours * pile.power
+            battery_cap = finished_car.get("battery_capacity_kwh",
+                                           self.battery_capacity)
+            current_base = finished_car.get("current_vehicle_kwh", 0.0)
+            max_chargeable = max(0.0, battery_cap - current_base)
+            # 精确值与 tick 累计值取较大者(防止 tick 已经四舍五入到稍高),
+            # 但不超过请求电量和电池容量上限.
+            tick_kwh = finished_car.get("charged_kwh", 0.0)
+            actual_kwh = min(max(precise_kwh, tick_kwh),
+                             finished_car["requested_kwh"],
+                             max_chargeable)
+        else:
+            actual_kwh = min(finished_car.get("charged_kwh", 0.0),
+                             finished_car["requested_kwh"])
+        actual_kwh = round(actual_kwh, 4)
 
         async with AsyncSessionLocal() as session:
             order = await session.get(ChargeOrder, finished_car['order_id'])
@@ -577,8 +640,13 @@ class SmartScheduler:
 
     def _dispatch_from_waiting_area(self):
         """
-        将等候区的车辆按动态优先级分数（降序）分配到最优桩队列。
-        仅由 dispatch_watcher 后台任务或管理员手动触发。
+        将等候区的车辆按 FIFO(提交时间)顺序分配到最优桩队列.
+        仅由 dispatch_watcher 后台任务或管理员手动触发.
+
+        策略(严格按详细需求):
+          1) numbering_paused 或有故障队列时直接返回(故障期间暂停叫号).
+          2) 对快/慢两类等候区, 各自按 FIFO 顺序遍历, 每辆车找最优桩.
+          3) 找不到合适桩的车保留在等候区, 继续尝试下一辆.
         """
         if self.numbering_paused or self._has_fault_waiting():
             return
@@ -589,7 +657,16 @@ class SmartScheduler:
             ("Fast", self.fast_waiting),
             ("Slow", self.slow_waiting),
         ]:
-            # 按优先级排序后尝试调度
+            if not waiting_list:
+                continue
+            # 【调试日志】打印等候区 FIFO 顺序快照(用 ASCII 字符避免 GBK 崩溃)
+            queue_repr = " -> ".join(
+                f"{c['vehicle_id']}({c.get('queue_number','?')})"
+                for c in waiting_list)
+            print(f"[Dispatch {current_vtime.strftime('%H:%M:%S')}] "
+                  f"{charge_type} 等候区 FIFO 顺序: {queue_repr}")
+
+            # 严格按 FIFO 顺序遍历(不排序)
             sorted_cars = list(waiting_list)
             dispatched_order_ids = []
             dispatched_updates = []
@@ -598,7 +675,16 @@ class SmartScheduler:
                 optimal = self._find_optimal_pile(
                     charge_type, car["requested_kwh"])
                 if optimal is None:
-                    continue  # 该车暂无空位，继续尝试下一辆（不 break）
+                    print(f"[Dispatch {current_vtime.strftime('%H:%M:%S')}]"
+                          f"   - {car['vehicle_id']}"
+                          f"({car.get('queue_number','?')}) "
+                          f"{car['requested_kwh']:.1f}kWh: 暂无可用桩")
+                    continue
+                print(f"[Dispatch {current_vtime.strftime('%H:%M:%S')}]"
+                      f"   [OK] {car['vehicle_id']}"
+                      f"({car.get('queue_number','?')}) "
+                      f"{car['requested_kwh']:.1f}kWh -> {optimal.pile_id}"
+                      f" (等待 {optimal.remaining_time_hours():.2f}h)")
                 dispatched_order_ids.append(car["order_id"])
                 optimal.queue.append(car)
                 is_first = len(optimal.queue) == 1
@@ -1472,6 +1558,8 @@ class SmartScheduler:
                     self.calculate_priority(item, current_vtime), 4),
                 "soc": round(max(0.0, min(1.0, soc)), 4),
                 "wait_minutes": round(max(0.0, wait_min), 2),
+                "battery_capacity_kwh": battery_cap,
+                "current_vehicle_kwh": current_kwh,
             }
 
         # 按优先级降序输出（仅展示，不修改内部 waiting_list）

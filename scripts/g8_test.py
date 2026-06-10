@@ -29,7 +29,6 @@ import argparse
 import asyncio
 import json
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -38,6 +37,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
+
+class ClockResetDetected(Exception):
+    """虚拟时钟被重置(时间倒退), 测试需要重新开始."""
+    pass
+
 
 # ============================================================
 # 项目路径
@@ -275,34 +279,37 @@ def wait_for_port_free(port: int, timeout: float = 10) -> bool:
 
 def cleanup_database() -> tuple:
     """清理旧数据库。
-    
+
     返回 (success: bool, alt_db_path: str|None)
     - (True, None)  : 原DB已清理, 使用默认路径
     - (True, path)  : 原DB被锁定, 需使用替代DB路径
     - (False, None) : 完全失败
-    
+
     策略:
-    1. 尝试直接删除原DB文件
-    2. 尝试重命名为 .db.old
-    3. 尝试移动到临时目录
-    4. 使用全新的临时DB文件(通过 SCS_DB_PATH 环境变量传给服务器)
+    1. 等待旧进程释放文件锁(最多15秒)
+    2. 尝试删除/重命名原DB文件
+    3. SQL回退: 连接DB, DROP ALL TABLES + 重建 (不删文件, 解决Windows锁问题)
+    4. 使用全新的临时DB文件(原DB完全无法访问时)
     """
     if not DB_FILE.exists():
         print("  数据库不存在(全新环境)")
         return True, None
 
-    # 尝试删除
+    # 等待文件锁释放
     for attempt in range(10):
         if not DB_FILE.exists():
             return True, None
         try:
             os.remove(DB_FILE)
-            print(f"  已删除旧数据库: {DB_FILE}")
+            print(f"  DB reset: 已删除旧数据库文件")
             return True, None
         except PermissionError:
             if attempt == 0:
-                print("  数据库文件被占用, 等待释放...")
+                print("  等待旧进程释放 DB 锁...", end="", flush=True)
+            else:
+                print(".", end="", flush=True)
             time.sleep(1.5)
+    print()  # newline
 
     # 尝试重命名
     backup = DB_FILE.with_suffix(".db.old")
@@ -310,26 +317,32 @@ def cleanup_database() -> tuple:
         if backup.exists():
             os.remove(backup)
         DB_FILE.rename(backup)
-        print(f"  已将旧数据库重命名为: {backup}")
+        print(f"  DB reset: 已重命名旧数据库 -> .db.old")
         return True, None
     except Exception:
         pass
 
-    # 尝试移动到临时目录
+    # SQL回退: 文件删不掉不代表DB不可用 —— 连接进去 DROP ALL TABLES 再重建
+    print("  DB 文件被占用, 尝试 SQL 级重置 (DROP ALL TABLES)...")
     try:
-        import tempfile
-        tmp = Path(tempfile.gettempdir()) / f"charging_{int(time.time())}.db"
-        shutil.move(str(DB_FILE), str(tmp))
-        print(f"  已将旧数据库移动到: {tmp}")
-        return True, None
-    except Exception:
-        pass
+        from src.models.database import engine, Base
+        import asyncio as _asyncio
 
-    # 最后方案: 使用临时DB路径(原DB被锁定, 用新路径绕过)
+        async def _sql_reset():
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+            from src.models.database import init_db as _init_db
+            await _init_db()
+        _asyncio.run(_sql_reset())
+        print("  DB reset: SQL 级 DROP + CREATE 完成 (无需删文件)")
+        return True, None
+    except Exception as e:
+        print(f"  [WARN] SQL 重置也失败: {e}")
+
+    # 最后方案: 临时DB
     import tempfile
     alt_db = str(Path(tempfile.gettempdir())
                  / f"g8_test_{int(time.time())}.db")
-    print(f"  [INFO] 原数据库被锁定无法删除")
     print(f"  将使用临时数据库: {alt_db}")
     return True, alt_db
 
@@ -339,12 +352,6 @@ def parse_vtime(time_str: str) -> datetime:
     h, m = map(int, time_str.split(":"))
     return VTIME_BASE.replace(hour=h, minute=m)
 
-
-def vtime_to_real_delay(vtime_str: str, ratio: float) -> float:
-    """计算从 06:00 到指定虚拟时间需要的真实等待秒数"""
-    target = parse_vtime(vtime_str)
-    delta_minutes = (target - VTIME_BASE).total_seconds() / 60.0
-    return delta_minutes / ratio
 
 
 async def wait_for_server(client: httpx.AsyncClient, timeout: float = 45):
@@ -696,7 +703,8 @@ class G8TestClient:
 # 测试执行逻辑
 # ============================================================
 
-async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
+async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
+                       browser_wait: int = 20):
     base_url = f"http://127.0.0.1:{port}"
 
     print("=" * 70)
@@ -737,6 +745,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
     print(f"  启动 FastAPI 服务器 (port={port})...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT)
+    env["PYTHONUNBUFFERED"] = "1"
     # 如果原DB被锁定, 使用替代DB路径
     if alt_db_path:
         env["SCS_DB_PATH"] = alt_db_path
@@ -746,9 +755,8 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
          "--host", "127.0.0.1", "--port", str(port)],
         cwd=str(PROJECT_ROOT),
         env=env,
-        # 重要: 不能用 PIPE, 否则管道缓冲区满后服务器会阻塞在 print() 上
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=open(PROJECT_ROOT / "server.log", "w", encoding="utf-8"),
+        stderr=subprocess.STDOUT,
     )
 
     tc = G8TestClient(base_url)
@@ -758,6 +766,49 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
         # 等待服务器启动
         await wait_for_server(tc.client)
         print("  服务器已启动")
+
+        # 重置辅助: 可在运行时重启服务器+清DB+重初始化
+        async def _restart_for_reset():
+            """Kill旧服务器, 重建DB, 启动新服务器, 重新连接."""
+            nonlocal server_proc, tc, alt_db_path, env
+            print("  停止旧服务器...")
+            server_proc.terminate()
+            try:
+                server_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_proc.kill()
+            kill_process_on_port(port)
+            time.sleep(2)
+
+            print("  重建数据库...")
+            db_ok, _alt = cleanup_database()
+            if _alt:
+                alt_db_path = _alt
+                env["SCS_DB_PATH"] = _alt
+
+            print("  启动新服务器...")
+            server_proc = subprocess.Popen(
+                [sys.executable, "-m", "uvicorn", "src.main:app",
+                 "--host", "127.0.0.1", "--port", str(port)],
+                cwd=str(PROJECT_ROOT),
+                env=env,
+                stdout=open(PROJECT_ROOT / "server.log", "w", encoding="utf-8"),
+                stderr=subprocess.STDOUT,
+            )
+            await tc.client.aclose()
+            tc.client = httpx.AsyncClient(
+                base_url=base_url,
+                timeout=httpx.Timeout(15.0, connect=10.0))
+            await wait_for_server(tc.client)
+            print("  新服务器已就绪")
+
+        print(f"\n  >>> 请在浏览器打开 http://127.0.0.1:{port}/admin.html <<<")
+        print(f"  >>> F12 Console 粘贴登录代码，刷新页面             <<<")
+        print(f"  >>> 等待 {browser_wait} 秒后自动开始测试...               <<<\n")
+        for i in range(browser_wait, 0, -1):
+            print(f"\r  {i:2d} 秒后开始...", end="", flush=True)
+            await asyncio.sleep(1)
+        print("\r  >>> 开始测试!                                    <<<\n")
 
         # ---- 2. 初始化用户和车辆 ----
         print("\n[2/7] 初始化用户和车辆...")
@@ -770,7 +821,6 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
         print("\n[3/7] 设置虚拟时钟...")
         await tc.setup_clock(ratio)
         await tc.start_clock()
-        clock_start_real = time.time()
 
         # 验证时钟正在运行
         clock_info = await tc.get_clock()
@@ -782,158 +832,244 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool):
         print(f"  时钟状态: running={clock_info.get('running')}, "
               f"vtime={clock_info.get('current_virtual_time', '?')}")
 
-        # ---- 4. 执行测试事件 ----
-        print("\n[4/7] 执行G8测试事件...")
-        print("-" * 70)
+        # ---- 辅助: 等待虚拟时间到达目标 (响应前端暂停/恢复/重置) ----
+        _paused_printed = False
+        _prev_vtime_full = ""  # 追踪上一次虚拟时间，检测重置
 
-        last_vtime_str = ""
-        event_results = []  # 记录每个事件执行结果
+        async def wait_until_vtime(target_str: str):
+            """轮询虚拟时钟直到到达 target_str (HH:MM).
+            期间响应前端暂停/恢复; 检测到时钟重置时抛出 ClockResetDetected."""
+            nonlocal _paused_printed, _prev_vtime_full
+            _err_count = 0
+            while True:
+                try:
+                    clock = await tc.get_clock()
+                    _err_count = 0
+                except Exception as e:
+                    _err_count += 1
+                    if _err_count <= 2:
+                        print(f"\n  [WARN] get_clock 失败 ({type(e).__name__}: {e}), 重试中...")
+                    await asyncio.sleep(0.5)
+                    continue
 
-        for idx, (vtime_str, etype, target_id, ctype, value) in enumerate(G8_EVENTS):
-            # 计算需要等待的真实时间
-            target_real_delay = vtime_to_real_delay(vtime_str, ratio)
-            elapsed_real = time.time() - clock_start_real
-            wait_time = target_real_delay - elapsed_real
+                running = clock.get("running", False)
+                vtime_full = clock.get("current_virtual_time", "")
+                vtime_hhmm = vtime_full[11:16] if len(vtime_full) >= 16 else vtime_full
 
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
+                if not running:
+                    if not _paused_printed:
+                        print(f"\n  ⏸  虚拟时钟已暂停 (当前={vtime_hhmm}), 等待恢复...")
+                        _paused_printed = True
+                    await asyncio.sleep(1.0)
+                    continue
 
-            # 获取当前虚拟时间 (带计时)
-            t_api = time.time()
-            try:
-                clock_info = await tc.get_clock()
-                current_vtime = clock_info.get("current_virtual_time", "?")
-                clock_running = clock_info.get("running", False)
-            except Exception:
-                current_vtime = "?"
-                clock_running = False
-            dt_clock = time.time() - t_api
+                if _paused_printed:
+                    print(f"  ▶  虚拟时钟已恢复流逝 (当前={vtime_hhmm})")
+                    _paused_printed = False
 
-            # 时钟健康检查
-            vtime_display = (current_vtime[11:16]
-                             if len(current_vtime) > 16
-                             else current_vtime)
+                # 检测时钟重置: 虚拟时间大幅倒退
+                if _prev_vtime_full and vtime_full < _prev_vtime_full:
+                    print(f"\n  🔄 检测到时钟重置! "
+                          f"(时间从 {_prev_vtime_full[11:19]} 退回到 {vtime_full[11:19]})")
+                    raise ClockResetDetected()
+                _prev_vtime_full = vtime_full
 
-            if not clock_running:
-                print(f"  [WARN] 虚拟时钟未运行! 尝试重启...")
-                await tc.start_clock()
+                if vtime_hhmm >= target_str:
+                    return
 
-            # 检查虚拟时间是否卡住
-            if (last_vtime_str and vtime_display == last_vtime_str
-                    and vtime_str != G8_EVENTS[max(0, idx-1)][0]):
-                print(f"  [WARN] 虚拟时间似乎卡住了: {vtime_display}")
+                await asyncio.sleep(0.3)
 
-            last_vtime_str = vtime_display
+        async def wait_all_done(target_str: str, check_interval: float = 5.0):
+            """等待虚拟时间到达 target_str, 或所有充电完成.
+            期间响应前端暂停/恢复; 检测到时钟重置时抛出 ClockResetDetected.
+            返回 True=时间到, False=提前完成."""
+            nonlocal _paused_printed, _prev_vtime_full
+            while True:
+                try:
+                    clock = await tc.get_clock()
+                except Exception:
+                    await asyncio.sleep(0.5)
+                    continue
 
-            # 执行事件
-            event_desc = ""
-            if etype == "A":
-                if ctype == "O" and value == 0:
-                    # 取消充电
-                    result = await tc.cancel_request(target_id)
+                running = clock.get("running", False)
+                vtime_full = clock.get("current_virtual_time", "")
+                vtime_hhmm = vtime_full[11:16] if len(vtime_full) >= 16 else vtime_full
+
+                # 检测时钟重置
+                if _prev_vtime_full and vtime_full < _prev_vtime_full:
+                    print(f"\n  🔄 检测到时钟重置! "
+                          f"(时间从 {_prev_vtime_full[11:19]} 退回到 {vtime_full[11:19]})")
+                    raise ClockResetDetected()
+                _prev_vtime_full = vtime_full
+
+                if not running:
+                    if not _paused_printed:
+                        print(f"\n  ⏸  虚拟时钟已暂停 (前端点击了暂停), 等待恢复...")
+                        _paused_printed = True
+                    await asyncio.sleep(1.0)
+                    continue
+
+                if _paused_printed:
+                    print(f"  ▶  虚拟时钟已恢复流逝")
+                    _paused_printed = False
+
+                # 检查是否所有充电完成
+                try:
+                    status = await tc.get_system_status()
+                    active = sum(
+                        p.get("queue_len", 0)
+                        for p in status.get("piles", [])
+                        if p.get("status") in ("CHARGING",)
+                    )
+                    waiting = (status.get("fast_waiting_count", 0)
+                               + status.get("slow_waiting_count", 0))
+                except Exception:
+                    active, waiting = 999, 999
+
+                if active == 0 and waiting == 0:
+                    print(f"\n  所有充电已完成! (vtime={vtime_hhmm})")
+                    return False  # 提前完成
+
+                if vtime_hhmm >= target_str:
+                    return True   # 时间到
+
+                vt_disp = vtime_hhmm
+                print(f"\r  vtime={vt_disp} 充电中={active} 等候区={waiting}   ", end="", flush=True)
+                await asyncio.sleep(check_interval)
+
+        # ================================================================
+        # 阶段 4+5: 执行测试事件 + 等待充电完成
+        # 使用 while 包裹, 前端点击"重置"时内层 break → 外层重新初始化 → 重新开始
+        # ================================================================
+        while True:
+            _reset_detected = False
+
+            # ---- 4. 执行测试事件 ----
+            print("\n[4/7] 执行G8测试事件...")
+            print("-" * 70)
+
+            event_results = []  # 记录每个事件执行结果
+
+            for idx, (vtime_str, etype, target_id, ctype, value) in enumerate(G8_EVENTS):
+                # 轮询虚拟时钟, 等待到达目标时间 (前端暂停则同步等待)
+                try:
+                    await wait_until_vtime(vtime_str)
+                except ClockResetDetected:
+                    _reset_detected = True
+                    break
+                # 获取当前虚拟时间
+                try:
+                    clock_info = await tc.get_clock()
+                    current_vtime = clock_info.get("current_virtual_time", "?")
+                except Exception:
+                    current_vtime = "?"
+
+                vtime_display = (current_vtime[11:16]
+                                 if len(current_vtime) > 16
+                                 else current_vtime)
+
+                # 执行事件
+                event_desc = ""
+                if etype == "A":
+                    if ctype == "O" and value == 0:
+                        # 取消充电
+                        result = await tc.cancel_request(target_id)
+                        result_status = result.get("status", "?")
+                        result_msg = result.get("message",
+                                                result.get("reason", ""))
+                        event_desc = (f"取消 {target_id} "
+                                      f"[{result_status}: {result_msg}]")
+                    else:
+                        # 提交充电请求
+                        charge_type = CHARGE_TYPE_MAP.get(ctype, "Slow")
+                        order_id = await tc.submit_charge_request(
+                            target_id, charge_type, value)
+                        if order_id:
+                            event_desc = (f"{target_id} 申请{charge_type}充"
+                                          f"{value}度 -> order#{order_id}")
+                        else:
+                            event_desc = (f"{target_id} 申请{charge_type}充"
+                                          f"{value}度 -> 被拒绝")
+
+                elif etype == "C":
+                    # 变更请求
+                    new_charge_type = (CHARGE_TYPE_MAP.get(ctype)
+                                       if ctype != "O" else None)
+                    new_kwh = value if value > 0 else None
+                    result = await tc.modify_request(
+                        target_id, charge_type=new_charge_type,
+                        requested_kwh=new_kwh)
                     result_status = result.get("status", "?")
                     result_msg = result.get("message",
                                             result.get("reason", ""))
-                    event_desc = (f"取消 {target_id} "
+                    event_desc = (f"{target_id} 变更 -> {ctype}{value}度 "
                                   f"[{result_status}: {result_msg}]")
+
+                elif etype == "B":
+                    # 充电桩故障
+                    result = await tc.fault_pile(target_id, value)
+                    result_status = result.get("status", "?")
+                    result_msg = result.get("message",
+                                            result.get("detail", ""))
+                    event_desc = (f"{target_id} 故障{value}分钟 "
+                                  f"[{result_status}: {result_msg}]")
+
                 else:
-                    # 提交充电请求
-                    charge_type = CHARGE_TYPE_MAP.get(ctype, "Slow")
-                    order_id = await tc.submit_charge_request(
-                        target_id, charge_type, value)
-                    if order_id:
-                        event_desc = (f"{target_id} 申请{charge_type}充"
-                                      f"{value}度 -> order#{order_id}")
-                    else:
-                        event_desc = (f"{target_id} 申请{charge_type}充"
-                                      f"{value}度 -> 被拒绝")
+                    event_desc = f"未知事件: {etype}"
 
-            elif etype == "C":
-                # 变更请求
-                new_charge_type = (CHARGE_TYPE_MAP.get(ctype)
-                                   if ctype != "O" else None)
-                new_kwh = value if value > 0 else None
-                result = await tc.modify_request(
-                    target_id, charge_type=new_charge_type,
-                    requested_kwh=new_kwh)
-                result_status = result.get("status", "?")
-                result_msg = result.get("message",
-                                        result.get("reason", ""))
-                event_desc = (f"{target_id} 变更 -> {ctype}{value}度 "
-                              f"[{result_status}: {result_msg}]")
+                print(f"\r  [{vtime_str}] (vtime={vtime_display}) "
+                      f"E{idx+1:02d}: {event_desc}")
 
-            elif etype == "B":
-                # 充电桩故障
-                result = await tc.fault_pile(target_id, value)
-                result_status = result.get("status", "?")
-                result_msg = result.get("message",
-                                        result.get("detail", ""))
-                event_desc = (f"{target_id} 故障{value}分钟 "
-                              f"[{result_status}: {result_msg}]")
+                event_results.append({
+                    "idx": idx + 1,
+                    "vtime": vtime_str,
+                    "actual_vtime": vtime_display,
+                    "desc": event_desc,
+                })
 
-            else:
-                event_desc = f"未知事件: {etype}"
+                # 每次事件后手动触发调度
+                await tc.manual_dispatch()
 
-            print(f"  [{vtime_str}] (vtime={vtime_display}) "
-                  f"E{idx+1:02d}: {event_desc}")
+            if _reset_detected:
+                # ---- 重置处理 ----
+                print("\n  🔄 前端点击了重置, 正在重启测试...")
+                await _restart_for_reset()
+                print("  重新初始化用户和车辆...")
+                await tc.login_admin()
+                await tc.register_test_user()
+                await tc.register_vehicles()
+                await tc.set_system_params(waiting_area_size=25)
+                print("  重新设置虚拟时钟...")
+                await tc.setup_clock(ratio)
+                await tc.start_clock()
+                _prev_vtime_full = ""
+                _paused_printed = False
+                print("  ▶ 测试已从头开始\n")
+                continue  # 回到外层 while, 重新执行阶段4
 
-            event_results.append({
-                "idx": idx + 1,
-                "vtime": vtime_str,
-                "actual_vtime": vtime_display,
-                "desc": event_desc,
-            })
+            # ---- 5. 等待充电完成 ----
+            print("\n[5/7] 等待所有充电完成...")
 
-            # 每次事件后手动触发调度
-            await tc.manual_dispatch()
+            # 轮询虚拟时钟, 到达 17:00 或所有充电完成
+            try:
+                timed_out = await wait_all_done("17:00")
+            except ClockResetDetected:
+                print("\n  🔄 等待期间检测到时钟重置, 正在重启测试...")
+                await _restart_for_reset()
+                print("  重新初始化用户和车辆...")
+                await tc.login_admin()
+                await tc.register_test_user()
+                await tc.register_vehicles()
+                await tc.set_system_params(waiting_area_size=25)
+                print("  重新设置虚拟时钟...")
+                await tc.setup_clock(ratio)
+                await tc.start_clock()
+                _prev_vtime_full = ""
+                _paused_printed = False
+                print("  ▶ 测试已从头开始\n")
+                continue
 
-        # ---- 5. 等待充电完成 ----
-        print("\n[5/7] 等待所有充电完成...")
-
-        # 等待虚拟时间到达 17:00 (确保所有充电和故障恢复都完成)
-        target_end = parse_vtime("17:00")
-        target_delay = ((target_end - VTIME_BASE).total_seconds()
-                        / 60.0 / ratio)
-        elapsed = time.time() - clock_start_real
-        remaining = target_delay - elapsed
-
-        if remaining > 0:
-            print(f"  等待虚拟时间到达 17:00 (约{int(remaining)}秒)...")
-            check_interval = min(10, remaining)
-            while remaining > 0:
-                await asyncio.sleep(check_interval)
-                try:
-                    clock_info = await tc.get_clock()
-                    current_vtime = clock_info.get(
-                        "current_virtual_time", "")
-                except Exception:
-                    current_vtime = "?"
-                # 检查是否还有活跃订单
-                status = await tc.get_system_status()
-                active_count = sum(
-                    p.get("queue_len", 0)
-                    for p in status.get("piles", [])
-                    if p.get("status") in ("CHARGING",)
-                )
-                waiting = (status.get("fast_waiting_count", 0)
-                           + status.get("slow_waiting_count", 0))
-                fault_waiting = sum(
-                    1 for p in status.get("piles", [])
-                    if p.get("status") == "FAULT")
-                elapsed = time.time() - clock_start_real
-                remaining = target_delay - elapsed
-                vt_disp = (current_vtime[11:16]
-                           if len(current_vtime) > 16
-                           else current_vtime)
-                print(f"  vtime={vt_disp} "
-                      f"充电中={active_count} "
-                      f"等候区={waiting} "
-                      f"故障桩={fault_waiting} "
-                      f"剩余{max(0, int(remaining))}秒")
-                if active_count == 0 and waiting == 0:
-                    print("  所有充电已完成!")
-                    break
-                check_interval = min(10, max(1, remaining))
+            break  # 阶段4+5成功完成
 
         # 额外等待确保故障恢复车辆完成
         await asyncio.sleep(5)
@@ -1155,6 +1291,8 @@ def main():
                         help="服务器端口 (默认自动分配空闲端口)")
     parser.add_argument("--skip-cleanup", action="store_true",
                         help="测试结束后不关闭服务器")
+    parser.add_argument("--browser-wait", type=int, default=20,
+                        help="服务器启动后等待N秒再开始测试, 默认20")
     args = parser.parse_args()
 
     # 确定端口
@@ -1164,7 +1302,8 @@ def main():
 
     try:
         success = asyncio.run(
-            run_g8_test(args.ratio, port, args.skip_cleanup))
+            run_g8_test(args.ratio, port, args.skip_cleanup,
+                        browser_wait=args.browser_wait))
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         print("\n测试被用户中断")

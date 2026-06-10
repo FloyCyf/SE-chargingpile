@@ -1,0 +1,2871 @@
+[
+  {
+    "vtime": "06:00",
+    "event": "[06:00] (V1,T,40) → {'status': 'success', 'qnum': 'T1', 'pile': 'T1'}",
+    "snapshot": {
+      "vtime": "06:00:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "IDLE",
+          "queue": []
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:05",
+    "event": "[06:05] (V2,T,30) → {'status': 'success', 'qnum': 'T2', 'pile': 'T2'}",
+    "snapshot": {
+      "vtime": "06:05:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 0.83,
+              "current_fee": 1.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V2",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:10",
+    "event": "[06:10] (V3,F,60) → {'status': 'success', 'qnum': 'F1', 'pile': 'F1'}",
+    "snapshot": {
+      "vtime": "06:10:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 1.67,
+              "current_fee": 2.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V2",
+              "charged_kwh": 0.83,
+              "current_fee": 1.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:20",
+    "event": "[06:20] cancel(V2) → {'status': 'success', 'msg': '充电中取消, 已出账单', 'bill': {'power_fee': 1.0, 'service_fee': 2.0, 'total_fee': 3.0, 'duration_min': 15, 'peak_kwh': 0.0, 'peak_fee': 0.0, 'flat_kwh': 0.0, 'flat_fee': 0.0, 'valley_kwh': 2.5, 'valley_fee': 1.0, 'segments': [{'period': 'valley', 'start': '06:05', 'end': '06:20', 'minutes': 15, 'kwh': 2.5, 'rate': 0.4, 'fee': 1.0}]}}",
+    "snapshot": {
+      "vtime": "06:20:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 5.0,
+              "current_fee": 6.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 3.33,
+              "current_fee": 4.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "IDLE",
+          "queue": []
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:25",
+    "event": "[06:25] (V4,T,20) → {'status': 'success', 'qnum': 'T3', 'pile': 'T2'}",
+    "snapshot": {
+      "vtime": "06:25:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 7.5,
+              "current_fee": 9.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 4.17,
+              "current_fee": 5.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:30",
+    "event": "[06:30] (V5,T,20) → {'status': 'success', 'qnum': 'T4', 'pile': 'T2'}",
+    "snapshot": {
+      "vtime": "06:30:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 10.0,
+              "current_fee": 12.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 5.0,
+              "current_fee": 6.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 0.83,
+              "current_fee": 1.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:40",
+    "event": "[06:40] (V6,T,20) → {'status': 'success', 'qnum': 'T5', 'pile': 'T1'}",
+    "snapshot": {
+      "vtime": "06:40:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 15.0,
+              "current_fee": 18.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 6.67,
+              "current_fee": 8.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 2.5,
+              "current_fee": 3.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "06:50",
+    "event": "[06:50] (V7,T,10) → {'status': 'success', 'qnum': 'T6', 'pile': 'T2'}",
+    "snapshot": {
+      "vtime": "06:50:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 20.0,
+              "current_fee": 24.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 8.33,
+              "current_fee": 10.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 4.17,
+              "current_fee": 5.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:00",
+    "event": "[07:00] (V8,F,90) → {'status': 'success', 'qnum': 'F2', 'pile': 'F2'}",
+    "snapshot": {
+      "vtime": "07:00:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 25.0,
+              "current_fee": 30.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 10.0,
+              "current_fee": 12.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 5.83,
+              "current_fee": 7.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:10",
+    "event": "[07:10] (V9,F,30) → {'status': 'success', 'qnum': 'F3', 'pile': 'F3'}",
+    "snapshot": {
+      "vtime": "07:10:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 30.0,
+              "current_fee": 37.5
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 11.67,
+              "current_fee": 14.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 7.5,
+              "current_fee": 9.5
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:15",
+    "event": "[07:15] (V10,T,10) → {'status': 'success', 'qnum': 'T7', 'pile': 'T1'}",
+    "snapshot": {
+      "vtime": "07:15:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 32.5,
+              "current_fee": 41.25
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 7.5,
+              "current_fee": 11.25
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 2.5,
+              "current_fee": 3.75
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 12.5,
+              "current_fee": 15.75
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 8.33,
+              "current_fee": 10.75
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:20",
+    "event": "[07:20] (V11,F,60) → {'status': 'success', 'qnum': 'F4', 'pile': 'F1'}",
+    "snapshot": {
+      "vtime": "07:20:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 35.0,
+              "current_fee": 45.0
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 10.0,
+              "current_fee": 15.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 13.33,
+              "current_fee": 17.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 9.17,
+              "current_fee": 11.99
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:25",
+    "event": "[07:25] (V12,T,10) → {'status': 'success', 'qnum': 'T8', 'pile': None}",
+    "snapshot": {
+      "vtime": "07:25:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 37.5,
+              "current_fee": 48.75
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 12.5,
+              "current_fee": 18.75
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 7.5,
+              "current_fee": 11.25
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 14.17,
+              "current_fee": 18.25
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 10.0,
+              "current_fee": 13.25
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:30",
+    "event": "[07:30] (V13,T,7.5) → {'status': 'success', 'qnum': 'T9', 'pile': None}",
+    "snapshot": {
+      "vtime": "07:30:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 40.0,
+              "current_fee": 52.5
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 15.0,
+              "current_fee": 22.5
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 10.0,
+              "current_fee": 15.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 15.0,
+              "current_fee": 19.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 10.83,
+              "current_fee": 14.5
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        },
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:35",
+    "event": "[07:35] (V14,F,75) → {'status': 'success', 'qnum': 'F5', 'pile': 'F3'}",
+    "snapshot": {
+      "vtime": "07:35:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 42.5,
+              "current_fee": 56.25
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 17.5,
+              "current_fee": 26.25
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 12.5,
+              "current_fee": 18.75
+            },
+            {
+              "vid": "V14",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 15.83,
+              "current_fee": 20.75
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 11.67,
+              "current_fee": 15.74
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        },
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "07:40",
+    "event": "[07:40] (V15,F,45) → {'status': 'success', 'qnum': 'F6', 'pile': 'F2'}",
+    "snapshot": {
+      "vtime": "07:40:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 45.0,
+              "current_fee": 60.0
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 20.0,
+              "current_fee": 30.0
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 15.0,
+              "current_fee": 22.5
+            },
+            {
+              "vid": "V14",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 16.67,
+              "current_fee": 22.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 12.5,
+              "current_fee": 17.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        },
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "08:00",
+    "event": "[08:00] (V16,T,5) → {'status': 'success', 'qnum': 'T10', 'pile': None}",
+    "snapshot": {
+      "vtime": "08:00:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V3",
+              "charged_kwh": 55.0,
+              "current_fee": 75.0
+            },
+            {
+              "vid": "V11",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 30.0,
+              "current_fee": 45.0
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V9",
+              "charged_kwh": 25.0,
+              "current_fee": 37.5
+            },
+            {
+              "vid": "V14",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 20.0,
+              "current_fee": 27.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 15.83,
+              "current_fee": 22.0
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        },
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "08:20",
+    "event": "[08:20] (V17,T,15) → {'status': 'success', 'qnum': 'T11', 'pile': None}",
+    "snapshot": {
+      "vtime": "08:20:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V11",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 40.0,
+              "current_fee": 60.0
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 23.33,
+              "current_fee": 32.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V4",
+              "charged_kwh": 19.17,
+              "current_fee": 26.99
+            },
+            {
+              "vid": "V5",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V12",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T8"
+        },
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "08:30",
+    "event": "[08:30] (V18,T,20) → {'status': 'success', 'qnum': 'T12', 'pile': None}",
+    "snapshot": {
+      "vtime": "08:30:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V11",
+              "charged_kwh": 10.0,
+              "current_fee": 15.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 45.0,
+              "current_fee": 67.5
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 10.0,
+              "current_fee": 15.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 25.0,
+              "current_fee": 34.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 0.83,
+              "current_fee": 1.25
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V18",
+          "ctype": "S",
+          "req_kwh": 20,
+          "qnum": "T12"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "08:35",
+    "event": "[08:35] (V19,T,25) → {'status': 'success', 'qnum': 'T13', 'pile': None}",
+    "snapshot": {
+      "vtime": "08:35:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V11",
+              "charged_kwh": 12.5,
+              "current_fee": 18.75
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 47.5,
+              "current_fee": 71.25
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 12.5,
+              "current_fee": 18.75
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 25.83,
+              "current_fee": 35.75
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 1.67,
+              "current_fee": 2.5
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V18",
+          "ctype": "S",
+          "req_kwh": 20,
+          "qnum": "T12"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:00",
+    "event": "[09:00] (V20,F,30) → {'status': 'success', 'qnum': 'F7', 'pile': 'F1'}",
+    "snapshot": {
+      "vtime": "09:00:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V11",
+              "charged_kwh": 25.0,
+              "current_fee": 37.5
+            },
+            {
+              "vid": "V20",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 60.0,
+              "current_fee": 90.0
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 25.0,
+              "current_fee": 37.5
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 30.0,
+              "current_fee": 42.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 5.83,
+              "current_fee": 8.75
+            },
+            {
+              "vid": "V7",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V18",
+          "ctype": "S",
+          "req_kwh": 20,
+          "qnum": "T12"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:10",
+    "event": "[09:10] cancel(V7) → {'status': 'success', 'msg': '桩内排队取消, 无费用'}",
+    "snapshot": {
+      "vtime": "09:10:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V11",
+              "charged_kwh": 30.0,
+              "current_fee": 45.0
+            },
+            {
+              "vid": "V20",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 65.0,
+              "current_fee": 97.5
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 30.0,
+              "current_fee": 45.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 31.67,
+              "current_fee": 44.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 7.5,
+              "current_fee": 11.25
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V13",
+          "ctype": "S",
+          "req_kwh": 7.5,
+          "qnum": "T9"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V18",
+          "ctype": "S",
+          "req_kwh": 20,
+          "qnum": "T12"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:20",
+    "event": "[09:20] cancel(V11) → {'status': 'success', 'msg': '充电中取消, 已出账单', 'bill': {'power_fee': 24.5, 'service_fee': 28.0, 'total_fee': 52.5, 'duration_min': 70, 'peak_kwh': 0.0, 'peak_fee': 0.0, 'flat_kwh': 35.0, 'flat_fee': 24.5, 'valley_kwh': 0.0, 'valley_fee': 0.0, 'segments': [{'period': 'flat', 'start': '08:10', 'end': '09:20', 'minutes': 70, 'kwh': 35.0, 'rate': 0.7, 'fee': 24.5}]}}",
+    "snapshot": {
+      "vtime": "09:20:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V20",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 70.0,
+              "current_fee": 105.0
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 35.0,
+              "current_fee": 52.5
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 33.33,
+              "current_fee": 47.0
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 9.17,
+              "current_fee": 13.75
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V18",
+          "ctype": "S",
+          "req_kwh": 20,
+          "qnum": "T12"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:30",
+    "event": "[09:30] cancel(V18) → {'status': 'success', 'msg': '等候区取消, 无费用'}",
+    "snapshot": {
+      "vtime": "09:30:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V20",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 75.0,
+              "current_fee": 112.5
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 40.0,
+              "current_fee": 60.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 35.0,
+              "current_fee": 49.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 10.83,
+              "current_fee": 16.25
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:35",
+    "event": "[09:35] cancel(V20) → {'status': 'success', 'msg': '充电中取消, 已出账单', 'bill': {'power_fee': 5.25, 'service_fee': 6.0, 'total_fee': 11.25, 'duration_min': 15, 'peak_kwh': 0.0, 'peak_fee': 0.0, 'flat_kwh': 7.5, 'flat_fee': 5.25, 'valley_kwh': 0.0, 'valley_fee': 0.0, 'segments': [{'period': 'flat', 'start': '09:20', 'end': '09:35', 'minutes': 15, 'kwh': 7.5, 'rate': 0.7, 'fee': 5.25}]}}",
+    "snapshot": {
+      "vtime": "09:35:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 77.5,
+              "current_fee": 116.25
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 42.5,
+              "current_fee": 63.75
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 35.83,
+              "current_fee": 50.75
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 11.67,
+              "current_fee": 17.5
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "09:50",
+    "event": "[09:50] (V21,F,30) → {'status': 'success', 'qnum': 'F8', 'pile': 'F1'}",
+    "snapshot": {
+      "vtime": "09:50:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V21",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V8",
+              "charged_kwh": 85.0,
+              "current_fee": 127.5
+            },
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 50.0,
+              "current_fee": 75.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V1",
+              "charged_kwh": 38.33,
+              "current_fee": 54.5
+            },
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 14.17,
+              "current_fee": 21.25
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        },
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "10:00",
+    "event": "[10:00] (V22,T,10) → {'status': 'success', 'qnum': 'T14', 'pile': None}",
+    "snapshot": {
+      "vtime": "10:00:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V21",
+              "charged_kwh": 5.0,
+              "current_fee": 7.5
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 55.0,
+              "current_fee": 82.5
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V6",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V16",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 15.83,
+              "current_fee": 23.75
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V19",
+          "ctype": "S",
+          "req_kwh": 25,
+          "qnum": "T13"
+        },
+        {
+          "vid": "V22",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T14"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "10:05",
+    "event": "[10:05] modify(V19,F,25) → {'status': 'success', 'qnum': 'F9'}",
+    "snapshot": {
+      "vtime": "10:05:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V21",
+              "charged_kwh": 7.5,
+              "current_fee": 12.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 2.5,
+              "current_fee": 4.5
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 57.5,
+              "current_fee": 87.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V6",
+              "charged_kwh": 0.83,
+              "current_fee": 1.5
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V16",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 16.67,
+              "current_fee": 25.24
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [
+        {
+          "vid": "V19",
+          "ctype": "F",
+          "req_kwh": 25,
+          "qnum": "F9"
+        }
+      ],
+      "waiting_slow": [
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V22",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T14"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "10:10",
+    "event": "[10:10] cancel(V21) → {'status': 'success', 'msg': '充电中取消, 已出账单', 'bill': {'power_fee': 8.5, 'service_fee': 8.0, 'total_fee': 16.5, 'duration_min': 20, 'peak_kwh': 5.0, 'peak_fee': 5.0, 'flat_kwh': 5.0, 'flat_fee': 3.5, 'valley_kwh': 0.0, 'valley_fee': 0.0, 'segments': [{'period': 'flat', 'start': '09:50', 'end': '10:00', 'minutes': 10, 'kwh': 5.0, 'rate': 0.7, 'fee': 3.5}, {'period': 'peak', 'start': '10:00', 'end': '10:10', 'minutes': 10, 'kwh': 5.0, 'rate': 1.0, 'fee': 5.0}]}}",
+    "snapshot": {
+      "vtime": "10:10:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 5.0,
+              "current_fee": 9.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 60.0,
+              "current_fee": 91.5
+            },
+            {
+              "vid": "V19",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V6",
+              "charged_kwh": 1.67,
+              "current_fee": 3.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V16",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 17.5,
+              "current_fee": 26.75
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        },
+        {
+          "vid": "V22",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T14"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "10:20",
+    "event": "[10:20] modify(V22,F,10) → {'status': 'success', 'qnum': 'F10'}",
+    "snapshot": {
+      "vtime": "10:20:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 10.0,
+              "current_fee": 18.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 65.0,
+              "current_fee": 100.5
+            },
+            {
+              "vid": "V19",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V6",
+              "charged_kwh": 3.33,
+              "current_fee": 6.0
+            },
+            {
+              "vid": "V10",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V16",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V5",
+              "charged_kwh": 19.17,
+              "current_fee": 29.74
+            },
+            {
+              "vid": "V12",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [
+        {
+          "vid": "V22",
+          "ctype": "F",
+          "req_kwh": 10,
+          "qnum": "F10"
+        }
+      ],
+      "waiting_slow": [
+        {
+          "vid": "V17",
+          "ctype": "S",
+          "req_kwh": 15,
+          "qnum": "T11"
+        }
+      ],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  },
+  {
+    "vtime": "10:30",
+    "event": "[10:30] fault(T1,60min) → {'status': 'success', 'displaced': 2}",
+    "snapshot": {
+      "vtime": "10:30:00",
+      "piles": {
+        "F1": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V22",
+              "charged_kwh": 5.0,
+              "current_fee": 9.0
+            }
+          ]
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 15.0,
+              "current_fee": 27.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V14",
+              "charged_kwh": 70.0,
+              "current_fee": 109.5
+            },
+            {
+              "vid": "V19",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "FAULT",
+          "queue": []
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V12",
+              "charged_kwh": 0.83,
+              "current_fee": 1.5
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V17",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": [
+        {
+          "vid": "V10",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T7"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        }
+      ]
+    }
+  },
+  {
+    "vtime": "10:50",
+    "event": "[10:50] fault(F1,120min) → {'status': 'success', 'displaced': 0}",
+    "snapshot": {
+      "vtime": "10:50:00",
+      "piles": {
+        "F1": {
+          "status": "FAULT",
+          "queue": []
+        },
+        "F2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V15",
+              "charged_kwh": 25.0,
+              "current_fee": 45.0
+            }
+          ]
+        },
+        "F3": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V19",
+              "charged_kwh": 5.0,
+              "current_fee": 9.0
+            }
+          ]
+        },
+        "T1": {
+          "status": "FAULT",
+          "queue": []
+        },
+        "T2": {
+          "status": "CHARGING",
+          "queue": [
+            {
+              "vid": "V12",
+              "charged_kwh": 4.17,
+              "current_fee": 7.5
+            },
+            {
+              "vid": "V13",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            },
+            {
+              "vid": "V17",
+              "charged_kwh": 0.0,
+              "current_fee": 0.0
+            }
+          ]
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": [
+        {
+          "vid": "V10",
+          "ctype": "S",
+          "req_kwh": 10,
+          "qnum": "T7"
+        },
+        {
+          "vid": "V16",
+          "ctype": "S",
+          "req_kwh": 5,
+          "qnum": "T10"
+        }
+      ]
+    }
+  },
+  {
+    "vtime": "23:59",
+    "event": "[end] 全部结束",
+    "snapshot": {
+      "vtime": "23:59:00",
+      "piles": {
+        "F1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F2": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "F3": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T1": {
+          "status": "IDLE",
+          "queue": []
+        },
+        "T2": {
+          "status": "IDLE",
+          "queue": []
+        }
+      },
+      "waiting_fast": [],
+      "waiting_slow": [],
+      "fault_fast": [],
+      "fault_slow": []
+    }
+  }
+]

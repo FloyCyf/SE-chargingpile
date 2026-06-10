@@ -1,0 +1,133 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+package "控制器层 src/api" {
+  class AdminRouter <<APIRouter>> {
+    +control_pile(pile_id, body, request, admin)
+    +get_all_piles(request, admin)
+    +get_waiting_area(request, admin)
+    +get_pile_status_logs(pile_id, limit, offset, admin)
+    +get_clock(request, admin)
+    +set_clock(body, request, admin)
+    +get_system_params(request, admin)
+    +update_system_params(body, request, admin)
+  }
+
+  class PileControlRequest <<DTO>> {
+    +action: str
+    +duration_minutes: Optional[float]
+  }
+
+  class PileControlResponse <<DTO>> {
+    +status: str
+    +message: str
+    +pile_id: str
+  }
+
+  class SystemStatusResponse <<DTO>> {
+    +piles: List[PileStatus]
+    +fast_waiting_count: int
+    +slow_waiting_count: int
+  }
+
+  class WaitingAreaResponse <<DTO>> {
+    +fast_waiting: List[WaitingCarDetail]
+    +slow_waiting: List[WaitingCarDetail]
+  }
+
+  class PileStatusLogResponse <<DTO>> {
+    +logs: List[PileStatusLogItem]
+    +total: int
+  }
+
+  class ClockSetBody <<DTO>> {
+    +datetime: Optional[str]
+    +ratio: Optional[float]
+  }
+
+  class SystemParamsUpdate <<DTO>> {
+    +waiting_area_size: Optional[int]
+    +pile_queue_length: Optional[int]
+    +alpha: Optional[float]
+    +beta: Optional[float]
+    +gamma: Optional[float]
+  }
+}
+
+package "业务/应用层 src/core" {
+  class SmartScheduler <<UseCaseController>> {
+    +piles: List[ChargingPile]
+    +clock: VirtualClock
+    +start_pile(pile_id): dict
+    +stop_pile(pile_id): dict
+    +fault_pile(pile_id, duration_minutes): dict
+    +recover_pile(pile_id): dict
+    +get_system_status(): dict
+    +get_waiting_area(): dict
+    +update_system_params(params): dict
+    -_log_pile_status(pile_id, old_status, new_status, reason, operator)
+  }
+
+  class ChargingPile <<RuntimeEntity>> {
+    +pile_id: str
+    +type: str
+    +power: float
+    +status: str
+    +queue: List[dict]
+    +has_space: bool
+    +is_idle: bool
+    +remaining_time_hours(): float
+  }
+
+  class VirtualClock <<SystemService>> {
+    +ratio: float
+    +get_time(): datetime
+    +set_time(dt)
+    +set_ratio(ratio)
+    +reset()
+  }
+}
+
+package "持久化层 src/models" {
+  class ORMChargingPile <<ORMEntity>> {
+    +pile_id: str
+    +pile_type: str
+    +status: str
+    +total_charge_count: int
+    +total_charge_duration: float
+    +total_charge_amount: float
+  }
+
+  class PileStatusLog <<ORMEntity>> {
+    +pile_id: str
+    +old_status: str
+    +new_status: str
+    +reason: str
+    +operator: str
+    +changed_at: DateTime
+  }
+
+  class AsyncSessionLocal <<DBSession>>
+}
+
+AdminRouter ..> PileControlRequest : 接收控制参数
+AdminRouter ..> PileControlResponse : 返回控制结果
+AdminRouter ..> SystemStatusResponse : 返回桩状态
+AdminRouter ..> WaitingAreaResponse : 返回等待区
+AdminRouter ..> PileStatusLogResponse : 返回状态日志
+AdminRouter ..> ClockSetBody : 设置虚拟时钟
+AdminRouter ..> SystemParamsUpdate : 设置调度参数
+
+AdminRouter --> SmartScheduler : request.app.state.scheduler
+
+SmartScheduler "1" *-- "多" ChargingPile : 创建并维护
+SmartScheduler "1" *-- "1" VirtualClock : 持有虚拟时钟
+SmartScheduler ..> AsyncSessionLocal : 读写数据库
+SmartScheduler ..> PileStatusLog : 记录状态变更
+
+AsyncSessionLocal ..> ORMChargingPile : 持久化充电桩
+AsyncSessionLocal ..> PileStatusLog : 持久化日志
+
+@enduml

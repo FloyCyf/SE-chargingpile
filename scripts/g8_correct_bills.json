@@ -1,0 +1,586 @@
+{
+  "V1": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T1",
+    "requested_kwh": 40,
+    "charged_kwh": 40.0,
+    "final_pile": "T1",
+    "charge_start": "06:00",
+    "finish_time": "10:00",
+    "power_fee": 25.0,
+    "service_fee": 32.0,
+    "total_fee": 57.0,
+    "duration_min": 240,
+    "segments": [
+      {
+        "period": "valley",
+        "start": "06:00",
+        "end": "07:00",
+        "minutes": 60,
+        "kwh": 10.0,
+        "rate": 0.4,
+        "fee": 4.0
+      },
+      {
+        "period": "flat",
+        "start": "07:00",
+        "end": "10:00",
+        "minutes": 180,
+        "kwh": 30.0,
+        "rate": 0.7,
+        "fee": 21.0
+      }
+    ]
+  },
+  "V2": {
+    "status": "CANCELLED",
+    "charge_type": "Slow",
+    "queue_number": "T2",
+    "requested_kwh": 30,
+    "charged_kwh": 2.5,
+    "final_pile": "T2",
+    "charge_start": "06:05",
+    "finish_time": "06:20",
+    "power_fee": 1.0,
+    "service_fee": 2.0,
+    "total_fee": 3.0,
+    "duration_min": 15,
+    "segments": [
+      {
+        "period": "valley",
+        "start": "06:05",
+        "end": "06:20",
+        "minutes": 15,
+        "kwh": 2.5,
+        "rate": 0.4,
+        "fee": 1.0
+      }
+    ]
+  },
+  "V3": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F1",
+    "requested_kwh": 60,
+    "charged_kwh": 60.0,
+    "final_pile": "F1",
+    "charge_start": "06:10",
+    "finish_time": "08:10",
+    "power_fee": 34.5,
+    "service_fee": 48.0,
+    "total_fee": 82.5,
+    "duration_min": 120,
+    "segments": [
+      {
+        "period": "valley",
+        "start": "06:10",
+        "end": "07:00",
+        "minutes": 50,
+        "kwh": 25.0,
+        "rate": 0.4,
+        "fee": 10.0
+      },
+      {
+        "period": "flat",
+        "start": "07:00",
+        "end": "08:10",
+        "minutes": 70,
+        "kwh": 35.0,
+        "rate": 0.7,
+        "fee": 24.5
+      }
+    ]
+  },
+  "V4": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T3",
+    "requested_kwh": 20,
+    "charged_kwh": 20.0,
+    "final_pile": "T2",
+    "charge_start": "06:25",
+    "finish_time": "08:25",
+    "power_fee": 12.26,
+    "service_fee": 16.0,
+    "total_fee": 28.26,
+    "duration_min": 121,
+    "segments": [
+      {
+        "period": "valley",
+        "start": "06:25",
+        "end": "07:00",
+        "minutes": 35,
+        "kwh": 5.7851,
+        "rate": 0.4,
+        "fee": 2.31
+      },
+      {
+        "period": "flat",
+        "start": "07:00",
+        "end": "08:26",
+        "minutes": 86,
+        "kwh": 14.2149,
+        "rate": 0.7,
+        "fee": 9.95
+      }
+    ]
+  },
+  "V5": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T4",
+    "requested_kwh": 20,
+    "charged_kwh": 20.0,
+    "final_pile": "T2",
+    "charge_start": "08:25",
+    "finish_time": "10:25",
+    "power_fee": 15.25,
+    "service_fee": 16.0,
+    "total_fee": 31.25,
+    "duration_min": 120,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "08:25",
+        "end": "10:00",
+        "minutes": 95,
+        "kwh": 15.8333,
+        "rate": 0.7,
+        "fee": 11.08
+      },
+      {
+        "period": "peak",
+        "start": "10:00",
+        "end": "10:25",
+        "minutes": 25,
+        "kwh": 4.1667,
+        "rate": 1.0,
+        "fee": 4.17
+      }
+    ]
+  },
+  "V6": {
+    "status": "FAULTED",
+    "charge_type": "Slow",
+    "queue_number": "T5",
+    "requested_kwh": 20,
+    "charged_kwh": 5.0,
+    "final_pile": "T1",
+    "charge_start": "10:00",
+    "finish_time": "10:30",
+    "power_fee": 5.0,
+    "service_fee": 4.0,
+    "total_fee": 9.0,
+    "duration_min": 30,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "10:00",
+        "end": "10:30",
+        "minutes": 30,
+        "kwh": 5.0,
+        "rate": 1.0,
+        "fee": 5.0
+      }
+    ]
+  },
+  "V7": {
+    "status": "CANCELLED",
+    "charge_type": "Slow",
+    "queue_number": "T6",
+    "requested_kwh": 10,
+    "charged_kwh": 0.0,
+    "final_pile": "T2",
+    "charge_start": null,
+    "finish_time": "09:10",
+    "power_fee": null,
+    "service_fee": null,
+    "total_fee": null,
+    "duration_min": null,
+    "segments": []
+  },
+  "V8": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F2",
+    "requested_kwh": 90,
+    "charged_kwh": 90.0,
+    "final_pile": "F2",
+    "charge_start": "07:00",
+    "finish_time": "10:00",
+    "power_fee": 63.0,
+    "service_fee": 72.0,
+    "total_fee": 135.0,
+    "duration_min": 180,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "07:00",
+        "end": "10:00",
+        "minutes": 180,
+        "kwh": 90.0,
+        "rate": 0.7,
+        "fee": 63.0
+      }
+    ]
+  },
+  "V9": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F3",
+    "requested_kwh": 30,
+    "charged_kwh": 30.0,
+    "final_pile": "F3",
+    "charge_start": "07:10",
+    "finish_time": "08:10",
+    "power_fee": 21.0,
+    "service_fee": 24.0,
+    "total_fee": 45.0,
+    "duration_min": 60,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "07:10",
+        "end": "08:10",
+        "minutes": 60,
+        "kwh": 30.0,
+        "rate": 0.7,
+        "fee": 21.0
+      }
+    ]
+  },
+  "V10": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T7",
+    "requested_kwh": 10,
+    "charged_kwh": 10.0,
+    "final_pile": "T1",
+    "charge_start": "12:00",
+    "finish_time": "13:00",
+    "power_fee": 10.0,
+    "service_fee": 8.0,
+    "total_fee": 18.0,
+    "duration_min": 61,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "12:00",
+        "end": "13:01",
+        "minutes": 61,
+        "kwh": 10.0,
+        "rate": 1.0,
+        "fee": 10.0
+      }
+    ]
+  },
+  "V11": {
+    "status": "CANCELLED",
+    "charge_type": "Fast",
+    "queue_number": "F4",
+    "requested_kwh": 60,
+    "charged_kwh": 35.0,
+    "final_pile": "F1",
+    "charge_start": "08:10",
+    "finish_time": "09:20",
+    "power_fee": 24.5,
+    "service_fee": 28.0,
+    "total_fee": 52.5,
+    "duration_min": 70,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "08:10",
+        "end": "09:20",
+        "minutes": 70,
+        "kwh": 35.0,
+        "rate": 0.7,
+        "fee": 24.5
+      }
+    ]
+  },
+  "V12": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T8",
+    "requested_kwh": 10,
+    "charged_kwh": 10.0,
+    "final_pile": "T2",
+    "charge_start": "10:25",
+    "finish_time": "11:25",
+    "power_fee": 10.0,
+    "service_fee": 8.0,
+    "total_fee": 18.0,
+    "duration_min": 60,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "10:24",
+        "end": "11:24",
+        "minutes": 60,
+        "kwh": 10.0,
+        "rate": 1.0,
+        "fee": 10.0
+      }
+    ]
+  },
+  "V13": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T9",
+    "requested_kwh": 7.5,
+    "charged_kwh": 7.5,
+    "final_pile": "T2",
+    "charge_start": "11:25",
+    "finish_time": "12:10",
+    "power_fee": 7.5,
+    "service_fee": 6.0,
+    "total_fee": 13.5,
+    "duration_min": 45,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "11:24",
+        "end": "12:09",
+        "minutes": 45,
+        "kwh": 7.5,
+        "rate": 1.0,
+        "fee": 7.5
+      }
+    ]
+  },
+  "V14": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F5",
+    "requested_kwh": 75,
+    "charged_kwh": 75.0,
+    "final_pile": "F3",
+    "charge_start": "08:10",
+    "finish_time": "10:40",
+    "power_fee": 58.5,
+    "service_fee": 60.0,
+    "total_fee": 118.5,
+    "duration_min": 150,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "08:10",
+        "end": "10:00",
+        "minutes": 110,
+        "kwh": 55.0,
+        "rate": 0.7,
+        "fee": 38.5
+      },
+      {
+        "period": "peak",
+        "start": "10:00",
+        "end": "10:40",
+        "minutes": 40,
+        "kwh": 20.0,
+        "rate": 1.0,
+        "fee": 20.0
+      }
+    ]
+  },
+  "V15": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F6",
+    "requested_kwh": 45,
+    "charged_kwh": 45.0,
+    "final_pile": "F2",
+    "charge_start": "10:00",
+    "finish_time": "11:30",
+    "power_fee": 45.0,
+    "service_fee": 36.0,
+    "total_fee": 81.0,
+    "duration_min": 90,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "10:00",
+        "end": "11:30",
+        "minutes": 90,
+        "kwh": 45.0,
+        "rate": 1.0,
+        "fee": 45.0
+      }
+    ]
+  },
+  "V16": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T10",
+    "requested_kwh": 5,
+    "charged_kwh": 5.0,
+    "final_pile": "T1",
+    "charge_start": "11:30",
+    "finish_time": "12:00",
+    "power_fee": 5.0,
+    "service_fee": 4.0,
+    "total_fee": 9.0,
+    "duration_min": 30,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "11:30",
+        "end": "12:00",
+        "minutes": 30,
+        "kwh": 5.0,
+        "rate": 1.0,
+        "fee": 5.0
+      }
+    ]
+  },
+  "V17": {
+    "status": "COMPLETED",
+    "charge_type": "Slow",
+    "queue_number": "T11",
+    "requested_kwh": 15,
+    "charged_kwh": 15.0,
+    "final_pile": "T2",
+    "charge_start": "12:10",
+    "finish_time": "13:40",
+    "power_fee": 15.0,
+    "service_fee": 12.0,
+    "total_fee": 27.0,
+    "duration_min": 91,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "12:09",
+        "end": "13:40",
+        "minutes": 91,
+        "kwh": 15.0,
+        "rate": 1.0,
+        "fee": 15.0
+      }
+    ]
+  },
+  "V18": {
+    "status": "CANCELLED",
+    "charge_type": "Slow",
+    "queue_number": "T12",
+    "requested_kwh": 20,
+    "charged_kwh": 0.0,
+    "final_pile": null,
+    "charge_start": null,
+    "finish_time": "09:30",
+    "power_fee": null,
+    "service_fee": null,
+    "total_fee": null,
+    "duration_min": null,
+    "segments": []
+  },
+  "V19": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F9",
+    "requested_kwh": 25,
+    "charged_kwh": 25.0,
+    "final_pile": "F3",
+    "charge_start": "10:40",
+    "finish_time": "11:30",
+    "power_fee": 25.0,
+    "service_fee": 20.0,
+    "total_fee": 45.0,
+    "duration_min": 50,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "10:40",
+        "end": "11:30",
+        "minutes": 50,
+        "kwh": 25.0,
+        "rate": 1.0,
+        "fee": 25.0
+      }
+    ]
+  },
+  "V20": {
+    "status": "CANCELLED",
+    "charge_type": "Fast",
+    "queue_number": "F7",
+    "requested_kwh": 30,
+    "charged_kwh": 7.5,
+    "final_pile": "F1",
+    "charge_start": "09:20",
+    "finish_time": "09:35",
+    "power_fee": 5.25,
+    "service_fee": 6.0,
+    "total_fee": 11.25,
+    "duration_min": 15,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "09:20",
+        "end": "09:35",
+        "minutes": 15,
+        "kwh": 7.5,
+        "rate": 0.7,
+        "fee": 5.25
+      }
+    ]
+  },
+  "V21": {
+    "status": "CANCELLED",
+    "charge_type": "Fast",
+    "queue_number": "F8",
+    "requested_kwh": 30,
+    "charged_kwh": 10.0,
+    "final_pile": "F1",
+    "charge_start": "09:50",
+    "finish_time": "10:10",
+    "power_fee": 8.5,
+    "service_fee": 8.0,
+    "total_fee": 16.5,
+    "duration_min": 20,
+    "segments": [
+      {
+        "period": "flat",
+        "start": "09:50",
+        "end": "10:00",
+        "minutes": 10,
+        "kwh": 5.0,
+        "rate": 0.7,
+        "fee": 3.5
+      },
+      {
+        "period": "peak",
+        "start": "10:00",
+        "end": "10:10",
+        "minutes": 10,
+        "kwh": 5.0,
+        "rate": 1.0,
+        "fee": 5.0
+      }
+    ]
+  },
+  "V22": {
+    "status": "COMPLETED",
+    "charge_type": "Fast",
+    "queue_number": "F10",
+    "requested_kwh": 10,
+    "charged_kwh": 10.0,
+    "final_pile": "F1",
+    "charge_start": "10:20",
+    "finish_time": "10:40",
+    "power_fee": 10.0,
+    "service_fee": 8.0,
+    "total_fee": 18.0,
+    "duration_min": 20,
+    "segments": [
+      {
+        "period": "peak",
+        "start": "10:20",
+        "end": "10:40",
+        "minutes": 20,
+        "kwh": 10.0,
+        "rate": 1.0,
+        "fee": 10.0
+      }
+    ]
+  }
+}

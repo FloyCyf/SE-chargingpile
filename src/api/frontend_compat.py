@@ -223,14 +223,14 @@ async def get_queue_list(request: Request):
         result.append({
             "queue_id": q.get("queue_number", "F"),
             "vehicle_id": q.get("vehicle_id", ""),
-            "queue_duration": 0,
+            "queue_duration": q.get("wait_minutes", 0) * 60,
             "requested_capacity": q.get("requested_kwh", 0),
         })
     for q in qdata.get("slow_waiting", []):
         result.append({
             "queue_id": q.get("queue_number", "T"),
             "vehicle_id": q.get("vehicle_id", ""),
-            "queue_duration": 0,
+            "queue_duration": q.get("wait_minutes", 0) * 60,
             "requested_capacity": q.get("requested_kwh", 0),
         })
     return result
@@ -248,7 +248,7 @@ async def get_pile_status(request: Request):
         dur = p.get("charged_duration", 0)
         res.append({
             "pile_id": p["pile_id"],
-            "status": "charging" if is_charging else ("fault" if p["status"] == "FAULT" else "idle"),
+            "status": "充电中" if is_charging else ("故障" if p["status"] == "FAULT" else "空闲"),
             "current_user": current_user,
             "charged_electricity": cur_soc * 100 if is_charging else 0,
             "charged_duration": dur or 0,
@@ -393,7 +393,7 @@ async def compat_dump(request: Request):
             "vehicle_id": q["vehicle_id"],
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
-            "queue_duration": 0,
+            "queue_duration": q.get("wait_minutes", 0) * 60,
             "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["slow_queue"] = []
@@ -402,7 +402,7 @@ async def compat_dump(request: Request):
             "vehicle_id": q["vehicle_id"],
             "queue_num": q["queue_number"],
             "requested_capacity": q["requested_kwh"],
-            "queue_duration": 0,
+            "queue_duration": q.get("wait_minutes", 0) * 60,
             "battery_capacity": q.get("battery_capacity_kwh", 100),
         })
     status["fast_queue_count"] = status["fast_waiting_count"]
