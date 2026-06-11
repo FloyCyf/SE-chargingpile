@@ -63,6 +63,8 @@ async def _build_vehicle_status(vehicle_id: str, request: Request) -> dict:
                 "queue_position": idx,
                 "order_id": q["order_id"],
                 "estimated_wait_time": "-",
+                "requested_kwh": q.get("requested_kwh", 0),
+                "charged_kwh": 0,
             }
 
     for idx, q in enumerate(qdata.get("fast_waiting", [])):
@@ -75,6 +77,9 @@ async def _build_vehicle_status(vehicle_id: str, request: Request) -> dict:
                 "queue_position": idx,
                 "order_id": q["order_id"],
                 "estimated_wait_time": "15",
+                "requested_kwh": q.get("requested_kwh", 0),
+                "charged_kwh": 0,
+                "charge_type": q.get("charge_type", "Slow"),
             }
 
     for idx, q in enumerate(qdata.get("slow_waiting", [])):
@@ -87,12 +92,20 @@ async def _build_vehicle_status(vehicle_id: str, request: Request) -> dict:
                 "queue_position": idx,
                 "order_id": q["order_id"],
                 "estimated_wait_time": "30",
+                "requested_kwh": q.get("requested_kwh", 0),
+                "charged_kwh": 0,
+                "charge_type": q.get("charge_type", "Slow"),
             }
 
     for p in status.get("piles", []):
         for idx, q in enumerate(p.get("queue_items", [])):
             if q["vehicle_id"] == vehicle_id:
                 state = "CHARGING" if idx == 0 and p["status"] == "CHARGING" else "QUEUING"
+                requested = q.get("requested_kwh", 0)
+                charged = q.get("charged_kwh", 0) if idx == 0 else 0
+                remaining = max(0, requested - charged)
+                pile_power = p.get("power", 30 if p.get("type") == "Fast" else 10)
+                remaining_hours = remaining / pile_power if pile_power > 0 else 0
                 return {
                     "status": state,
                     "area": "charging_area",
@@ -100,7 +113,14 @@ async def _build_vehicle_status(vehicle_id: str, request: Request) -> dict:
                     "queue_id": p["pile_id"],
                     "queue_position": idx,
                     "order_id": q["order_id"],
-                    "estimated_wait_time": "0",
+                    "estimated_wait_time": f"{remaining_hours * 60:.0f}",
+                    "requested_kwh": requested,
+                    "charged_kwh": round(charged, 2),
+                    "remaining_kwh": round(remaining, 2),
+                    "pile_power": pile_power,
+                    "current_fee": q.get("current_fee", 0),
+                    "charge_start_time": q.get("charge_start_time"),
+                    "charge_type": q.get("charge_type", p.get("type", "Slow")),
                 }
 
     async with AsyncSessionLocal() as session:

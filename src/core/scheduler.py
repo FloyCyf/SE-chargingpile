@@ -1446,6 +1446,7 @@ class SmartScheduler:
                     "position": i,
                     "order_id": car["order_id"],
                     "vehicle_id": car["vehicle_id"],
+                    "charge_type": car.get("charge_type", p.type),
                     "queue_number": car.get("queue_number"),
                     "requested_kwh": car["requested_kwh"],
                     "charged_kwh": car.get("charged_kwh", 0.0),

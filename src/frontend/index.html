@@ -796,11 +796,18 @@
             try {
                 const vehicleId = currentVehicleId;
                 if (!vehicleId) return;
-                
+
                 const response = await axios.get(`/api/user/vehicle/status/${vehicleId}?session_id=${encodeURIComponent(vehicleSessionId)}`);
                 const data = response.data;
-                
-                const capacity = document.getElementById('capacity').value;
+
+                const reqKwh = data.requested_kwh || parseFloat(document.getElementById('capacity').value) || 0;
+                const chargedKwh = data.charged_kwh || 0;
+                const remainingKwh = data.remaining_kwh;
+                const pilePower = data.pile_power;
+                const currentFee = data.current_fee || 0;
+                const chargeStartTime = data.charge_start_time;
+                const isCharging = data.status === 'CHARGING';
+
                 const areaBadgeColor = {
                     '等候区': 'background:rgba(212,180,131,0.3);color:#ad7e64;border:1px solid rgba(212,180,131,0.5)',
                     '充电区': 'background:rgba(102,126,234,0.3);color:#667eea;border:1px solid rgba(102,126,234,0.5)',
@@ -812,25 +819,55 @@
                     'not_submitted': 'background:rgba(143,138,126,0.2);color:#666;border:1px solid rgba(143,138,126,0.4)',
                 };
                 const areaStyle = areaBadgeColor[data.area] || 'background:#eee;color:#666';
+
+                // 构建充电进度条（仅充电区且正在充电时显示）
+                let progressHtml = '';
+                let extraInfoHtml = '';
+                if (isCharging && reqKwh > 0) {
+                    const pct = Math.min(100, (chargedKwh / reqKwh) * 100).toFixed(0);
+                    const remMin = remainingKwh !== undefined && pilePower
+                        ? Math.round(remainingKwh / pilePower * 60)
+                        : (data.estimated_wait_time || 0);
+                    progressHtml = `
+                        <div class="mt-2 mb-1">
+                            <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>充电进度 ${pct}%</span>
+                                <span>${chargedKwh.toFixed(2)} / ${reqKwh.toFixed(1)} kWh</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-green-500 h-2 rounded-full transition-all" style="width:${pct}%"></div>
+                            </div>
+                        </div>`;
+                    extraInfoHtml = `
+                        <p>已充电量: <span class="font-semibold text-green-600">${chargedKwh.toFixed(2)} 度</span></p>
+                        <p>剩余电量: <span class="font-semibold text-orange-500">${remainingKwh !== undefined ? remainingKwh.toFixed(2) : '--'} 度</span></p>
+                        <p>当前费用: <span class="font-semibold text-blue-600">¥${currentFee.toFixed(2)}</span></p>
+                        <p>预计剩余: <span class="font-semibold text-blue-600">${remMin} 分钟</span></p>`;
+                } else {
+                    extraInfoHtml = `
+                        <p>请求电量: <span class="font-semibold text-gray-800">${reqKwh.toFixed(1)} 度</span></p>
+                        <p>前车等待: <span class="text-orange-500 font-semibold">${data.queue_position || 0} 辆</span></p>
+                        <p>预计等待: <span class="text-blue-600 font-semibold">${data.estimated_wait_time || '--'} 分钟</span></p>`;
+                }
+
                 const statusHtml = `
                     <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
                         <div class="flex justify-between items-center mb-2">
                             <span class="font-semibold text-gray-800">${vehicleId}</span>
-                            <span class="${chargeMode === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
-                                ${chargeMode === 'Fast' ? '快充' : '慢充'}
+                            <span class="${(data.charge_type || chargeMode) === 'Fast' ? 'badge badge-fast' : 'badge badge-slow'}">
+                                ${(data.charge_type || chargeMode) === 'Fast' ? '快充' : '慢充'}
                             </span>
                         </div>
                         <div class="mb-2">
                             <span style="${areaStyle};padding:3px 10px;border-radius:9999px;font-size:12px;font-weight:600">
-                                ${data.area || '未知'}
+                                ${data.status || data.area || '未知'}
                             </span>
                             <span class="text-xs text-gray-500 ml-2">${data.area_detail || ''}</span>
                         </div>
+                        ${progressHtml}
                         <div class="text-sm text-gray-600 space-y-1">
-                            <p>排队号码: <span class="font-semibold text-gray-800">${data.queue_id || '暂无'}</span></p>
-                            <p>请求电量: <span class="font-semibold text-gray-800">${capacity}度</span></p>
-                            <p>前车等待: <span class="text-orange-500 font-semibold">${data.queue_position || 0}辆</span></p>
-                            <p>预计等待: <span class="text-blue-600 font-semibold">${data.estimated_wait_time || '0'}分钟</span></p>
+                            <p>位置: <span class="font-semibold text-gray-800">${data.queue_id || '暂无'}</span></p>
+                            ${extraInfoHtml}
                         </div>
                         <button onclick="cancelChargeRequest()" class="btn-secondary w-full mt-3 py-2 text-sm text-white rounded-lg">
                             取消充电
@@ -1189,6 +1226,7 @@
                 loadUserClock();
                 loadQueueList();
                 loadPileStatus();
+                updateCurrentStatus();
             }, 1000);
 
             setInterval(checkVehicleStatus, 500);

@@ -632,6 +632,26 @@ class G8TestClient:
             return {"status": "failed", "detail": resp.text}
         return resp.json()
 
+    async def pause_clock(self):
+        """暂停虚拟时钟"""
+        try:
+            await self._retry_request(
+                lambda: self.client.post("/api/admin/clock/pause",
+                                         headers=self._admin_headers()),
+                desc="暂停时钟")
+        except RuntimeError:
+            pass
+
+    async def resume_clock(self):
+        """恢复虚拟时钟流逝"""
+        try:
+            await self._retry_request(
+                lambda: self.client.post("/api/admin/clock/start",
+                                         headers=self._admin_headers()),
+                desc="恢复时钟")
+        except RuntimeError:
+            pass
+
     async def manual_dispatch(self):
         """手动触发调度 (带重试)"""
         try:
@@ -641,6 +661,61 @@ class G8TestClient:
                 desc="手动调度")
         except RuntimeError as e:
             print(f"    [WARN] 调度请求失败: {e}")
+
+    async def wait_until_dispatched(self, vehicle_id: str,
+                                    max_attempts: int = 15,
+                                    interval: float = 1.0):
+        """暂停虚拟时钟 → 轮询确认车辆已入桩 → 恢复时钟。
+
+        仅在修改请求成功后调用，避免竞态导致车辆入错桩。"""
+        # 先暂停时钟，防止等待期间虚拟时间流逝过多
+        try:
+            await self._retry_request(
+                lambda: self.client.post("/api/admin/clock/pause",
+                                         headers=self._admin_headers()),
+                desc="暂停时钟(wait_dispatch)")
+        except RuntimeError:
+            pass
+
+        dispatched = False
+        for attempt in range(max_attempts):
+            try:
+                status = await self.get_system_status()
+            except Exception:
+                await asyncio.sleep(interval)
+                continue
+
+            # 检查车辆是否已在某个桩的队列中
+            for p in status.get("piles", []):
+                for qi in p.get("queue_items", []):
+                    if qi.get("vehicle_id") == vehicle_id:
+                        dispatched = True
+                        break
+                if dispatched:
+                    break
+
+            if dispatched:
+                break
+
+            # 还在等候区 → 触发调度 + 等待
+            if attempt < max_attempts - 1:
+                await self.manual_dispatch()
+                await asyncio.sleep(interval)
+
+        if not dispatched:
+            print(f"    [WARN] {vehicle_id} 在 {max_attempts * interval:.0f} 秒内"
+                  f"未入桩，可能仍在等候区")
+
+        # 恢复时钟流逝
+        try:
+            await self._retry_request(
+                lambda: self.client.post("/api/admin/clock/start",
+                                         headers=self._admin_headers()),
+                desc="恢复时钟(wait_dispatch)")
+        except RuntimeError:
+            pass
+
+        return dispatched
 
     # ---- 系统参数 ----
 
@@ -752,7 +827,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
         print(f"  使用替代数据库: {alt_db_path}")
     server_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "src.main:app",
-         "--host", "127.0.0.1", "--port", str(port)],
+         "--host", "0.0.0.0", "--port", str(port)],
         cwd=str(PROJECT_ROOT),
         env=env,
         stdout=open(PROJECT_ROOT / "server.log", "w", encoding="utf-8"),
@@ -789,7 +864,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
             print("  启动新服务器...")
             server_proc = subprocess.Popen(
                 [sys.executable, "-m", "uvicorn", "src.main:app",
-                 "--host", "127.0.0.1", "--port", str(port)],
+                 "--host", "0.0.0.0", "--port", str(port)],
                 cwd=str(PROJECT_ROOT),
                 env=env,
                 stdout=open(PROJECT_ROOT / "server.log", "w", encoding="utf-8"),
@@ -802,8 +877,8 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
             await wait_for_server(tc.client)
             print("  新服务器已就绪")
 
-        print(f"\n  >>> 请在浏览器打开 http://127.0.0.1:{port}/admin.html <<<")
-        print(f"  >>> F12 Console 粘贴登录代码，刷新页面             <<<")
+        print(f"\n  >>> 本机浏览器打开 http://127.0.0.1:{port}/admin.html <<<")
+        print(f"  >>> 其他电脑打开 http://<本机IP>:{port}/admin.html  <<<")
         print(f"  >>> 等待 {browser_wait} 秒后自动开始测试...               <<<\n")
         for i in range(browser_wait, 0, -1):
             print(f"\r  {i:2d} 秒后开始...", end="", flush=True)
@@ -972,8 +1047,10 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
                 event_desc = ""
                 if etype == "A":
                     if ctype == "O" and value == 0:
-                        # 取消充电
+                        # 取消充电 — 先暂停时钟精确控制中断时刻
+                        await tc.pause_clock()
                         result = await tc.cancel_request(target_id)
+                        await tc.resume_clock()
                         result_status = result.get("status", "?")
                         result_msg = result.get("message",
                                                 result.get("reason", ""))
@@ -1005,9 +1082,17 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
                     event_desc = (f"{target_id} 变更 -> {ctype}{value}度 "
                                   f"[{result_status}: {result_msg}]")
 
+                    # 方案A: 只有真正修改成功(非取消回退)时才确认入桩
+                    if (result_status == "success"
+                            and result_msg
+                            and "修改成功" in str(result_msg)):
+                        await tc.wait_until_dispatched(target_id)
+
                 elif etype == "B":
-                    # 充电桩故障
+                    # 充电桩故障 — 先暂停时钟精确控制故障时刻
+                    await tc.pause_clock()
                     result = await tc.fault_pile(target_id, value)
+                    await tc.resume_clock()
                     result_status = result.get("status", "?")
                     result_msg = result.get("message",
                                             result.get("detail", ""))
