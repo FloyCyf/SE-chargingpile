@@ -1,14 +1,18 @@
+import csv
+import io
 from datetime import datetime
 from typing import Optional
 
+import openpyxl
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from src.core.billing import calculate_fee
+from src.core.billing import calculate_fee, get_billing_config
 from src.models.database import AsyncSessionLocal
-from src.models.models import Bill, ChargeOrder, Vehicle
+from src.models.models import Bill, BillDetail, ChargeOrder, Vehicle
 
 router = APIRouter()
 
@@ -578,3 +582,178 @@ async def pause_user_clock(request: Request):
         "current_virtual_time": request.app.state.scheduler.clock.get_time().strftime("%Y-%m-%d %H:%M:%S"),
         "running": request.app.state.scheduler.clock.running,
     }
+
+
+# ---- 车辆端导出详单 ----
+
+
+@router.get("/user/export/{vehicle_id}")
+async def export_user_bills(
+    vehicle_id: str,
+    session_id: Optional[str] = Query(None),
+    format: str = Query("csv", description="导出格式: csv 或 xlsx"),
+    data: str = Query("all", description="数据范围: all(账单+详单) 或 details(仅详单)"),
+):
+    """
+    车辆端导出本车账单/详单。
+    - format=csv&data=details → 仅详单 CSV
+    - format=csv&data=all     → 账单 CSV（含服务费）
+    - format=xlsx&data=all    → 账单+详单 Excel（两个 Sheet）
+    """
+    vehicle_id = _verify_vehicle_session(vehicle_id, session_id)
+    fmt = (format or "csv").lower()
+    data_scope = (data or "all").lower()
+    service_rate = get_billing_config().get("service_fee_rate", 0.8)
+
+    # ---------- CSV ----------
+    if fmt == "csv":
+        if data_scope == "details":
+            # 仅导出详单（峰平谷分段）
+            async with AsyncSessionLocal() as session:
+                stmt = (
+                    select(BillDetail, Bill.bill_code, Bill.vehicle_id)
+                    .join(Bill, BillDetail.bill_id == Bill.id)
+                    .where(Bill.vehicle_id == vehicle_id)
+                    .order_by(BillDetail.id.desc())
+                )
+                result = await session.execute(stmt)
+                rows = result.all()
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow([
+                "详单ID", "账单编号", "车牌号", "时段类型",
+                "开始时刻", "结束时刻", "持续(分钟)",
+                "电量(kWh)", "电价(元/kWh)", "费用(元)",
+                "服务费率(元/kWh)", "服务费(元)",
+            ])
+            for detail, bill_code, vid in rows:
+                period_name = {"peak": "峰时", "flat": "平时", "valley": "谷时"}.get(
+                    detail.period, detail.period)
+                seg_kwh = detail.kwh or 0
+                seg_service_fee = round(seg_kwh * service_rate, 2)
+                writer.writerow([
+                    detail.id, bill_code, vid, period_name,
+                    detail.start_time or "", detail.end_time or "",
+                    detail.duration_minutes or 0,
+                    round(seg_kwh, 4), round(detail.rate or 0, 2),
+                    round(detail.fee or 0, 2),
+                    round(service_rate, 2), seg_service_fee,
+                ])
+
+            output.seek(0)
+            return StreamingResponse(
+                iter(["\ufeff" + output.getvalue()]),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f"attachment; filename=bill_details_{vehicle_id}.csv"},
+            )
+        else:
+            # 导出账单汇总
+            async with AsyncSessionLocal() as session:
+                bills = (
+                    await session.execute(
+                        select(Bill)
+                        .options(selectinload(Bill.details))
+                        .where(Bill.vehicle_id == vehicle_id)
+                        .order_by(Bill.id.desc())
+                    )
+                ).scalars().unique().all()
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow([
+                "账单编号", "订单ID", "车牌号", "充电桩", "充电模式",
+                "充电时长(h)", "充电电量(kWh)", "充电费(元)", "服务费(元)",
+                "总费用(元)", "开始时间", "结束时间", "账单生成时间",
+            ])
+            for b in bills:
+                writer.writerow([
+                    b.bill_code, b.order_id, b.vehicle_id, b.pile_id or "",
+                    b.charge_type, round(b.charge_duration or 0, 4),
+                    round(b.total_power or 0, 4),
+                    round(b.power_fee or 0, 2), round(b.service_fee or 0, 2),
+                    round(b.total_fee or 0, 2),
+                    b.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_start_time else "",
+                    b.charge_end_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_end_time else "",
+                    b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
+                ])
+
+            output.seek(0)
+            return StreamingResponse(
+                iter(["\ufeff" + output.getvalue()]),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f"attachment; filename=bills_{vehicle_id}.csv"},
+            )
+
+    # ---------- XLSX ----------
+    else:
+        async with AsyncSessionLocal() as session:
+            bills = (
+                await session.execute(
+                    select(Bill)
+                    .options(selectinload(Bill.details))
+                    .where(Bill.vehicle_id == vehicle_id)
+                    .order_by(Bill.id.desc())
+                )
+            ).scalars().unique().all()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "账单列表"
+        ws.append([
+            "账单编号", "订单ID", "车牌号", "充电桩", "充电模式",
+            "充电时长(h)", "充电电量(kWh)", "充电费(元)", "服务费(元)",
+            "总费用(元)", "开始时间", "结束时间", "账单生成时间",
+        ])
+        for b in bills:
+            ws.append([
+                b.bill_code, b.order_id, b.vehicle_id, b.pile_id or "",
+                b.charge_type, round(b.charge_duration or 0, 4),
+                round(b.total_power or 0, 4),
+                round(b.power_fee or 0, 2), round(b.service_fee or 0, 2),
+                round(b.total_fee or 0, 2),
+                b.charge_start_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_start_time else "",
+                b.charge_end_time.strftime("%Y-%m-%d %H:%M:%S") if b.charge_end_time else "",
+                b.created_at.strftime("%Y-%m-%d %H:%M:%S") if b.created_at else "",
+            ])
+
+        # 详单子表
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(BillDetail, Bill.bill_code, Bill.vehicle_id)
+                .join(Bill, BillDetail.bill_id == Bill.id)
+                .where(Bill.vehicle_id == vehicle_id)
+                .order_by(BillDetail.id.desc())
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+
+        ws2 = wb.create_sheet("详单列表")
+        ws2.append([
+            "详单ID", "账单编号", "车牌号", "时段类型",
+            "开始时刻", "结束时刻", "持续(分钟)",
+            "电量(kWh)", "电价(元/kWh)", "费用(元)",
+            "服务费率(元/kWh)", "服务费(元)",
+        ])
+        period_map = {"peak": "峰时", "flat": "平时", "valley": "谷时"}
+        for detail, bill_code, vid in rows:
+            seg_kwh = detail.kwh or 0
+            seg_service_fee = round(seg_kwh * service_rate, 2)
+            ws2.append([
+                detail.id, bill_code, vid,
+                period_map.get(detail.period, detail.period),
+                detail.start_time or "", detail.end_time or "",
+                detail.duration_minutes or 0,
+                round(seg_kwh, 4), round(detail.rate or 0, 2),
+                round(detail.fee or 0, 2),
+                round(service_rate, 2), seg_service_fee,
+            ])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=bills_{vehicle_id}.xlsx"},
+        )
