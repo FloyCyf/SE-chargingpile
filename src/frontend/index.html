@@ -358,7 +358,13 @@
 
             <!-- 右侧：充电详单 -->
             <div class="card bg-white rounded-lg p-6">
-                <h2 class="text-lg font-semibold text-gray-800 mb-4">📋 充电详单</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-800">📋 充电详单</h2>
+                    <div class="flex gap-2">
+                        <button onclick="exportMyBills('csv')" class="btn-secondary px-3 py-1 rounded-lg text-xs" title="导出为CSV文件">导出 CSV</button>
+                        <button onclick="exportMyBills('xlsx')" class="btn-primary px-3 py-1 text-white rounded-lg text-xs" title="导出为Excel文件">导出 Excel</button>
+                    </div>
+                </div>
 
                 <div class="flex border-b border-gray-200 mb-4">
                     <button onclick="showTab('current')" id="tab-current" class="px-4 py-2 text-gray-500 hover:text-gray-800 tab-active">
@@ -919,6 +925,35 @@
             }
 
             loadDetails(tab);
+        }
+
+        async function exportMyBills(ext) {
+            const vehicleId = (currentVehicleId || document.getElementById('vid').value || '').trim().toUpperCase();
+            if (!vehicleId || !vehicleRegistered) {
+                showNotification('请先注册/登录车辆后再导出详单', 'error');
+                return;
+            }
+            try {
+                const url = `/api/user/export/${encodeURIComponent(vehicleId)}?session_id=${encodeURIComponent(vehicleSessionId)}&format=${ext}`;
+                const res = await fetch(url);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || '导出失败');
+                }
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                const disposition = res.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename=(.+)/);
+                a.download = match ? match[1] : `bills_${vehicleId}.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+                showNotification(`详单已导出为 ${ext.toUpperCase()} 文件`, 'success');
+            } catch (error) {
+                showNotification('导出失败: ' + error.message, 'error');
+            }
         }
 
         async function loadDetails(type) {

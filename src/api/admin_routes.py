@@ -435,6 +435,7 @@ async def export_bill_details_csv(
     admin: dict = Depends(require_admin),
 ):
     """导出所有详单为 CSV 文件"""
+    service_rate = get_billing_config().get("service_fee_rate", 0.8)
     async with AsyncSessionLocal() as session:
         stmt = (select(BillDetail, Bill.bill_code, Bill.vehicle_id)
                 .join(Bill, BillDetail.bill_id == Bill.id)
@@ -448,16 +449,20 @@ async def export_bill_details_csv(
         "详单ID", "账单编号", "车牌号", "时段类型",
         "开始时刻", "结束时刻", "持续(分钟)",
         "电量(kWh)", "电价(元/kWh)", "费用(元)",
+        "服务费率(元/kWh)", "服务费(元)",
     ])
     for detail, bill_code, vehicle_id in rows:
         period_name = {"peak": "峰时", "flat": "平时", "valley": "谷时"}.get(
             detail.period, detail.period)
+        seg_kwh = detail.kwh or 0
+        seg_service_fee = round(seg_kwh * service_rate, 2)
         writer.writerow([
             detail.id, bill_code, vehicle_id, period_name,
             detail.start_time or "", detail.end_time or "",
             detail.duration_minutes or 0,
-            round(detail.kwh or 0, 4), round(detail.rate or 0, 2),
+            round(seg_kwh, 4), round(detail.rate or 0, 2),
             round(detail.fee or 0, 2),
+            round(service_rate, 2), seg_service_fee,
         ])
 
     output.seek(0)
@@ -811,7 +816,8 @@ async def export_bills_xlsx(
 async def export_bill_details_xlsx(
     admin: dict = Depends(require_admin),
 ):
-    """导出所有详单为 Excel 文件（含峰平谷分段）"""
+    """导出所有详单为 Excel 文件（含峰平谷分段和服务费）"""
+    service_rate = get_billing_config().get("service_fee_rate", 0.8)
     async with AsyncSessionLocal() as session:
         stmt = (select(BillDetail, Bill.bill_code, Bill.vehicle_id)
                 .join(Bill, BillDetail.bill_id == Bill.id)
@@ -826,16 +832,21 @@ async def export_bill_details_xlsx(
         "详单ID", "账单编号", "车牌号", "时段类型",
         "开始时刻", "结束时刻", "持续(分钟)",
         "电量(kWh)", "电价(元/kWh)", "费用(元)",
+        "服务费率(元/kWh)", "服务费(元)",
     ])
     period_map = {"peak": "峰时", "flat": "平时", "valley": "谷时"}
     for detail, bill_code, vehicle_id in rows:
+        seg_kwh = detail.kwh or 0
+        seg_service_fee = round(seg_kwh * service_rate, 2)
         ws.append([
             detail.id, bill_code, vehicle_id,
             period_map.get(detail.period, detail.period),
             detail.start_time or "", detail.end_time or "",
             detail.duration_minutes or 0,
-            round(detail.kwh or 0, 4),
+            round(seg_kwh, 4),
             round(detail.rate or 0, 2),
             round(detail.fee or 0, 2),
+            round(service_rate, 2),
+            seg_service_fee,
         ])
     return _make_xlsx_response(wb, "bill_details.xlsx")
