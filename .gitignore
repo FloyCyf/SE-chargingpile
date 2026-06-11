@@ -5,6 +5,14 @@ __pycache__/
 
 # Local SQLite runtime database
 charging.db
+g9_dbs/
+scripts/g9_results.json
+server_g9.log
+server.log
+test_db.py
+test_e2e.py
+test_e2e_v2.py
+test_e2e_v3.py
 
 # Office temporary lock files
 ~$*.docx

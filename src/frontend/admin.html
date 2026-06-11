@@ -680,6 +680,30 @@
                         </button>
                     </div>
                 </div>
+
+                <div>
+                    <h3 class="text-base font-semibold mb-3 text-gray-800 mt-6 md:mt-0">🧪 扩展调度策略（实验性）</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">调度策略</label>
+                            <select id="dispatch-policy-select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                                <option value="fifo">FIFO 顺序调度（默认）</option>
+                                <option value="batch_min_total">单次调度总充电时长最短</option>
+                            </select>
+                        </div>
+                        <div class="text-xs text-gray-600 bg-yellow-50 border border-yellow-200 p-2 rounded leading-relaxed">
+                            ⚠ 切换后<strong>立即触发一次</strong>该策略的调度。<br>
+                            ⚠ 默认 watch 调度（每 2 秒）始终为 FIFO，不受影响。<br>
+                            ⚠ 适合"多空位 + 多等候车"场景做批次最优分配。
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            当前策略: <span id="current-policy-label" class="font-mono font-semibold text-blue-600">fifo</span>
+                        </div>
+                        <button onclick="applyDispatchPolicy()" class="btn-primary w-full py-3 text-white rounded-lg font-medium">
+                            应用并立即触发一次
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1031,6 +1055,7 @@
                 settingsPanel.style.display = 'block';
                 loadBillingConfig();
                 loadClock(false, true);
+                refreshDispatchPolicy();
             }
         }
 
@@ -1241,6 +1266,20 @@
                 updatePiles(data.piles);
                 updateQueues(data.fast_queue, data.slow_queue);
                 loadAcceptanceSnapshot(false);
+
+                // 报表 / 订单 / 详单 Tab 也周期性刷新 (3s 一次, 避免 1s 频率刷爆)
+                pollReportCounter = (pollReportCounter || 0) + 1;
+                if (pollReportCounter % 3 === 0) {
+                    const reportPanel = document.getElementById('report-panel');
+                    if (reportPanel && reportPanel.style.display !== 'none') {
+                        loadReportData();
+                    }
+                    const ordermgrPanel = document.getElementById('ordermgr-panel');
+                    if (ordermgrPanel && ordermgrPanel.style.display !== 'none') {
+                        loadAdminOrders();
+                        loadAdminBills();
+                    }
+                }
             } catch (e) {
                 console.error('Polling error:', e);
             }
@@ -1630,6 +1669,49 @@
             } catch (e) {
                 console.error('Error saving billing config:', e);
                 showNotification('保存失败: 网络错误', 'error');
+            }
+        }
+
+        // ---- 扩展调度策略 (实验性) ----
+        async function refreshDispatchPolicy() {
+            try {
+                const res = await fetch('/api/admin/dispatch-policy', {
+                    headers: adminHeaders()
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('current-policy-label').textContent = data.policy;
+                    document.getElementById('dispatch-policy-select').value = data.policy;
+                }
+            } catch (e) { /* 未登录时静默 */ }
+        }
+
+        async function applyDispatchPolicy() {
+            const policy = document.getElementById('dispatch-policy-select').value;
+            try {
+                const res = await fetch('/api/admin/dispatch-policy', {
+                    method: 'POST',
+                    headers: adminHeaders({'Content-Type': 'application/json'}),
+                    body: JSON.stringify({policy})
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    const inner = data.result || {};
+                    showNotification(
+                        `已切换到 ${policy}, 本轮分配 ${inner.assignments_count || 0} 辆车`
+                        + (inner.count_by_pile
+                           ? ' (各桩: ' + JSON.stringify(inner.count_by_pile) + ')'
+                           : ''),
+                        'success'
+                    );
+                    document.getElementById('current-policy-label').textContent = policy;
+                    await poll();   // 强制刷新监控面板
+                } else {
+                    showNotification('切换失败: ' + (data.detail || data.message || '未知错误'), 'error');
+                }
+            } catch (e) {
+                console.error('Error applying dispatch policy:', e);
+                showNotification('切换失败: 网络错误', 'error');
             }
         }
 

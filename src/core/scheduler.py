@@ -137,6 +137,13 @@ class SmartScheduler:
         self.priority_fast_weight: float = priority_cfg.get('fast_type_weight', 1.0)
         self.priority_slow_weight: float = priority_cfg.get('slow_type_weight', 0.5)
 
+        # ---- 扩展调度策略 (新增) ----
+        # 默认仍是 FIFO, 与原 _dispatch_from_waiting_area 行为一致.
+        # 运行时可通过 /api/admin/dispatch-policy 切换.
+        # 0 字节修改原方法: 新入口是 dispatch_with_policy(), 与原
+        # dispatch_from_waiting_area_async() 并存, 不互相干扰.
+        self.dispatch_policy: str = "fifo"
+
     # ------------------------------------------------------------------
     #  排队号生成
     # ------------------------------------------------------------------
@@ -789,6 +796,90 @@ class SmartScheduler:
             await asyncio.sleep(2.0)
             async with self.lock:
                 await self.dispatch_from_waiting_area_async()
+
+    # ------------------------------------------------------------------
+    #  扩展调度入口 (新增 — 0 字节修改 dispatch_watcher 本身)
+    # ------------------------------------------------------------------
+
+    async def dispatch_with_policy(self, policy_name: str = "fifo") -> dict:
+        """
+        按指定策略执行一次调度. 走与 FIFO 不同的代码路径, 不影响
+        dispatch_watcher 默认每 2 秒的 FIFO 循环.
+
+        流程:
+          1. 激活预约到期的 pending_requests
+          2. 故障队列优先调度 (与 FIFO 路径相同)
+          3. 用策略对象 compute 一组 Assignment
+          4. _apply_assignments 落库 + 移出等候区
+        """
+        from src.core.policies import get_policy, available_policies
+
+        if policy_name not in available_policies():
+            return {"status": "failed",
+                    "message": f"未知策略 {policy_name}, "
+                               f"可选: {available_policies()}"}
+
+        async with self.lock:
+            await self._activate_pending_requests()
+            await self._dispatch_fault_waiting_async()
+            if self._has_fault_waiting():
+                return {"status": "skipped",
+                        "reason": "故障队列优先, 本轮不分配"}
+
+            policy = get_policy(policy_name)
+            assignments = policy.assign(
+                self.piles,
+                self.fast_waiting + self.slow_waiting,
+                self.clock.get_time())
+
+            if not assignments:
+                return {"status": "success",
+                        "policy": policy_name,
+                        "assignments_count": 0,
+                        "message": "无可用桩位或无等候车辆"}
+
+            count_by_pile = await self._apply_assignments(assignments)
+            return {
+                "status": "success",
+                "policy": policy_name,
+                "assignments_count": len(assignments),
+                "count_by_pile": count_by_pile,
+                "message": f"已分配 {len(assignments)} 辆车",
+            }
+
+    async def _apply_assignments(self, assignments) -> dict:
+        """
+        把策略产出的 Assignment 列表落到内存+DB+日志.
+        完全复用 _assign_to_pile_queue 写库, 不重复实现.
+        返回 {pile_id: count} 统计.
+        """
+        from collections import Counter
+        # 先去重 (按 order_id), 防止策略 bug 给出重复分配
+        seen_order = set()
+        unique_assignments = []
+        for a in assignments:
+            oid = a.car.get("order_id")
+            if oid in seen_order:
+                continue
+            seen_order.add(oid)
+            unique_assignments.append(a)
+
+        # 把车从等候区移除 (在内存里)
+        order_to_car = {a.car.get("order_id"): a for a in unique_assignments}
+        self.fast_waiting[:] = [
+            c for c in self.fast_waiting
+            if c.get("order_id") not in order_to_car]
+        self.slow_waiting[:] = [
+            c for c in self.slow_waiting
+            if c.get("order_id") not in order_to_car]
+
+        # 落库 (复用现有方法, 不重写)
+        current_vtime = self.clock.get_time()
+        for a in unique_assignments:
+            await self._assign_to_pile_queue(
+                a.pile_obj, a.car, current_vtime)
+
+        return dict(Counter(a.pile_id for a in unique_assignments))
 
     # ------------------------------------------------------------------
     #  取消请求（等候区 + 充电区均可）

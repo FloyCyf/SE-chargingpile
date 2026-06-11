@@ -734,6 +734,56 @@ async def update_system_params(
     return result
 
 
+# ---- 扩展调度策略 (新增端点) ----
+
+class DispatchPolicyUpdate(BaseModel):
+    policy: str   # "fifo" | "batch_min_total"
+
+
+@router.post("/dispatch-policy")
+async def set_dispatch_policy(
+    body: DispatchPolicyUpdate,
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """
+    运行时切换扩展调度策略, 并立即触发一次该策略的调度.
+
+    注意:
+      - 原 POST /api/admin/dispatch 仍走 FIFO, 不受本端点影响
+      - 原 dispatch_watcher 后台循环也仍走 FIFO
+      - 本端点仅影响"通过 /api/admin/dispatch-policy 主动调用"的入口
+    """
+    policy = (body.policy or "").strip()
+    if policy not in ("fifo", "batch_min_total"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"未知策略: {policy}; 可选: fifo | batch_min_total")
+
+    scheduler = request.app.state.scheduler
+    scheduler.dispatch_policy = policy
+    result = await scheduler.dispatch_with_policy(policy)
+    return {
+        "status": "success",
+        "policy": policy,
+        "result": result,
+    }
+
+
+@router.get("/dispatch-policy")
+async def get_dispatch_policy(
+    request: Request,
+    admin: dict = Depends(require_admin),
+):
+    """查询当前扩展调度策略 (不影响原 FIFO 行为)"""
+    from src.core.policies import available_policies
+    scheduler = request.app.state.scheduler
+    return {
+        "policy": scheduler.dispatch_policy,
+        "available": available_policies(),
+    }
+
+
 # ---- Excel 导出 ----
 
 def _make_xlsx_response(wb: "openpyxl.Workbook", filename: str) -> StreamingResponse:

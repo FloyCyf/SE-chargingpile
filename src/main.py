@@ -30,13 +30,21 @@ async def lifespan(app: FastAPI):
     print("[Lifecycle] Starting background tasks...")
     sim_task = asyncio.create_task(
         app.state.scheduler.simulate_battery_growth())
-    dispatch_task = asyncio.create_task(
-        app.state.scheduler.dispatch_watcher())
+    # 仅当显式设置 SCS_DISABLE_WATCHER=1 时才禁用后台 dispatch_watcher
+    # 默认行为 (无环境变量) 保持原样, 不影响 G8 等验收
+    import os
+    if os.environ.get("SCS_DISABLE_WATCHER", "0") == "1":
+        print("[Lifecycle] SCS_DISABLE_WATCHER=1 — dispatch_watcher 已禁用 (供 G9 策略对比实验用)")
+        dispatch_task = None
+    else:
+        dispatch_task = asyncio.create_task(
+            app.state.scheduler.dispatch_watcher())
 
     yield
 
     sim_task.cancel()
-    dispatch_task.cancel()
+    if dispatch_task is not None:
+        dispatch_task.cancel()
 
 
 app = FastAPI(

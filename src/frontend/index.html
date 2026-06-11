@@ -1264,6 +1264,18 @@
                 updateCurrentStatus();
             }, 1000);
 
+            // 详单页面也周期性刷新 (3s 一次, 频率太高会刷爆)
+            setInterval(() => {
+                if (vehicleRegistered) {
+                    const currentTab = document.querySelector('button.tab-active')?.id;
+                    if (currentTab === 'tab-current') {
+                        loadDetails('current');
+                    } else if (currentTab === 'tab-history') {
+                        loadDetails('history');
+                    }
+                }
+            }, 3000);
+
             setInterval(checkVehicleStatus, 500);
         };
         window.addEventListener('beforeunload', releaseVehicleSession);
