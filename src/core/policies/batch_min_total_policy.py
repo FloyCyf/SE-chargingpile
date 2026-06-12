@@ -6,10 +6,10 @@
 
 算法 (按车数规模自适应):
   - 阶段 A: 评估总空位, 计算"最多能塞下几辆车"
-  - 阶段 B: 若 N ≤ DP_MAX (=8), 用精确 DP 枚举所有 (P+1)^N 种分组,
+  - 阶段 B: 若 N ≤ DP_MAX (=10), 用精确 DP 枚举所有 (P+1)^N 种分组,
             找到最小总成本的分配
-  - 阶段 C: 若 N > DP_MAX, 退化为 LPT 贪心: 大车优先,
-            每车放到"加入后该桩总成本增量最小"的桩
+  - 阶段 C: 若 N > DP_MAX, 退化为最小成本增量贪心:
+            每步选择一组 (车, 桩), 使本步加入后 Σ完成时刻增量最小
 
 成本定义 (单桩):
   桩 p 当前剩余 R 小时, 加入 N_p 辆车按 SPT 升序排列:
@@ -30,8 +30,9 @@ from typing import List
 from . import Assignment, DispatchPolicy, register_policy
 
 
-# 小规模上限: 超过此值用贪心 (避免 9^9 = 387M 枚举)
-DP_MAX = 8
+# 小规模上限: 默认等候区容量为 10; 3 根快充桩时 4^10 约 104 万,
+# 对课程项目规模仍可接受, 且能覆盖 G9 验收常见上限.
+DP_MAX = 10
 
 
 def _pile_cost(ks_sorted_asc: List[float], R: float, power: float) -> float:
@@ -131,41 +132,56 @@ def _batch_dp(cars, pile_info, ks, dp_max=DP_MAX):
 
 def _batch_greedy(cars, pile_info, ks):
     """
-    LPT 贪心回退: 按 kWh 降序逐车分配, 每车放到"加入后该桩总成本最小"的桩.
-    O(N · P · N·logN) — N 较大时仍很快.
+    贪心回退: 每一步从所有未分配车辆和可用桩位中选成本增量最小的一对.
+    该启发式贴近 "Σ完成时刻最短" 目标, 会自然优先短作业, 避免 LPT
+    在本目标下把大车提前造成平均完成时间变差.
     """
     N = len(cars)
     P = len(pile_info)
     if N == 0 or P == 0:
         return [], 0.0
 
-    # 按 kWh 降序排
-    sorted_car_idx = sorted(range(N), key=lambda i: -ks[i])
-
     # 记录每根桩"已虚拟分配"的车辆 idx
     pile_car_set = {p: [] for p in range(P)}
+    unassigned = set(range(N))
 
-    for ci in sorted_car_idx:
-        kwh = ks[ci]
+    while unassigned:
+        best_pair = None
         best_p = None
         best_cost_increase = float('inf')
 
-        for p_idx, pile in enumerate(pile_info):
-            if len(pile_car_set[p_idx]) >= pile['max_new']:
-                continue
-            # 尝试把 ci 加到该桩, 算新成本
-            current_ks = sorted([ks[i] for i in pile_car_set[p_idx]])
-            current_cost = _pile_cost(
-                current_ks, pile['R'], pile['power'])
-            new_ks = sorted(current_ks + [kwh])
-            new_cost = _pile_cost(new_ks, pile['R'], pile['power'])
-            increase = new_cost - current_cost
-            if increase < best_cost_increase:
-                best_cost_increase = increase
-                best_p = p_idx
+        for ci in sorted(unassigned, key=lambda i: (ks[i], cars[i].get("queue_number", ""))):
+            kwh = ks[ci]
+            for p_idx, pile in enumerate(pile_info):
+                if len(pile_car_set[p_idx]) >= pile['max_new']:
+                    continue
+                current_ks = sorted([ks[i] for i in pile_car_set[p_idx]])
+                current_cost = _pile_cost(
+                    current_ks, pile['R'], pile['power'])
+                new_ks = sorted(current_ks + [kwh])
+                new_cost = _pile_cost(new_ks, pile['R'], pile['power'])
+                increase = new_cost - current_cost
+                tie_key = (
+                    increase,
+                    pile['pile_id'],
+                    kwh,
+                    cars[ci].get("vehicle_id", ""),
+                )
+                best_key = (
+                    best_cost_increase,
+                    pile_info[best_p]['pile_id'] if best_p is not None else "",
+                    ks[best_pair] if best_pair is not None else 0.0,
+                    cars[best_pair].get("vehicle_id", "") if best_pair is not None else "",
+                )
+                if best_pair is None or tie_key < best_key:
+                    best_cost_increase = increase
+                    best_pair = ci
+                    best_p = p_idx
 
-        if best_p is not None:
-            pile_car_set[best_p].append(ci)
+        if best_pair is None or best_p is None:
+            break
+        pile_car_set[best_p].append(best_pair)
+        unassigned.remove(best_pair)
 
     # 构造 partition 和 Assignment 列表
     partition = {p: idxs for p, idxs in pile_car_set.items() if idxs}

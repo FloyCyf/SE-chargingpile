@@ -7,9 +7,9 @@ G9 — 扩展调度策略端到端测试 (照 G8 模式)
   1) 杀掉旧进程 + 重置 DB
   2) 后台启动 uvicorn
   3) 自动开浏览器 + 等用户登录切策略
-  4) 自动注册 11 辆 + 设置 pile_queue_length=1
-  5) 自动提交 8 fast + 3 slow 充电请求
-  6) 启动虚拟时钟 (ratio 默认 1, 即 1 真实秒 = 1 虚拟分钟)
+  4) 自动注册 24 辆 + 设置 pile_queue_length=3
+  5) 自动提交 15 辆填满充电区, 再提交 9 辆进入等候区
+  6) 启动虚拟时钟 (ratio 默认 4, 即 1 真实秒 = 4 虚拟分钟)
   7) 循环触发调度 (每 2s 一次, 用用户选的策略), 直到等候区清空或超时
   8) 打印每辆车状态
   9) 服务器保留运行, 按 Ctrl+C 退出
@@ -367,22 +367,25 @@ async def main_async(args):
             # kWh 大小选择 (ratio=4 时, 1 真实秒=4 虚拟分钟):
             #   - 3 kWh fast = 6 虚拟分钟 = 1.5 真实秒 (位置 0 立即充完)
             #   - 20 kWh fast = 40 虚拟分钟 = 10 真实秒
-            #   - 30 kWh slow = 180 虚拟分钟 = 45 真实秒 (测试时间内不充完, 留在桩上)
-            #   - 25 kWh slow = 150 虚拟分钟 = 37 真实秒
+            #   - 6 kWh slow = 36 虚拟分钟 = 9 真实秒 (让慢充也能在脚本内释放车位)
+            #   - 25 kWh slow = 150 虚拟分钟 = 37.5 真实秒
 
             # 阶段 1: 15 辆先填满所有 5 桩 (3 fast + 2 slow)
-            # 每桩 3 辆, 位置 0 都是 3 kWh (立即充完, 腾出位置)
+            # 注意提交顺序必须先提交各桩 position 0 的 3kWh 小车。
+            # 否则 submit_request 的"最短完成时间选桩"会把首车打散，
+            # 第一轮就无法形成"多个车辆空位"。
             plan_phase1 = [
-                # F1 = [3, 15, 20]  (位置 0 = 3度, 1.5s 充完)
-                ("V1", "Fast", 3.0),  ("V2", "Fast", 15.0), ("V3", "Fast", 20.0),
-                # F2 = [3, 12, 18]
-                ("V4", "Fast", 3.0),  ("V5", "Fast", 12.0), ("V6", "Fast", 18.0),
-                # F3 = [3, 10, 15]
-                ("V7", "Fast", 3.0),  ("V8", "Fast", 10.0), ("V9", "Fast", 15.0),
-                # T1 = [3, 20, 15]  (slow, 3 度需 18 虚拟分钟 = 4.5s)
-                ("V10", "Slow", 3.0), ("V11", "Slow", 20.0), ("V12", "Slow", 15.0),
-                # T2 = [3, 15, 10]
-                ("V13", "Slow", 3.0), ("V14", "Slow", 15.0), ("V15", "Slow", 10.0),
+                # 先让 F1/F2/F3 的 position 0 均为 3kWh
+                ("V1", "Fast", 3.0),  ("V4", "Fast", 3.0),  ("V7", "Fast", 3.0),
+                # 再填 F1/F2/F3 的 position 1
+                ("V2", "Fast", 15.0), ("V5", "Fast", 12.0), ("V8", "Fast", 10.0),
+                # 再填 F1/F2/F3 的 position 2
+                ("V3", "Fast", 20.0), ("V6", "Fast", 18.0), ("V9", "Fast", 15.0),
+                # 慢充同理: 先让 T1/T2 的 position 0 均为 3kWh
+                ("V10", "Slow", 3.0), ("V13", "Slow", 3.0),
+                # 再填 T1/T2 的 position 1/2
+                ("V11", "Slow", 6.0), ("V14", "Slow", 6.0),
+                ("V12", "Slow", 6.0), ("V15", "Slow", 6.0),
             ]
             # 阶段 2: 9 辆进等候区 (5 fast + 4 slow), kWh 故意大悬殊
             # 等小 kWh (3 度) 充完腾出 fast 桩位后, BATCH 选 V18(5)/V17(10)/V19(12)
@@ -458,10 +461,17 @@ async def main_async(args):
             else:
                 print(f"  [STEP 3/4] 阶段 A 达到 {args.max_dispatch_rounds} 轮上限, 强制结束")
 
-            # 阶段 B: 等所有车都充电完成 (不等车在等候区, 等所有订单都 COMPLETED)
-            print(f"  [STEP 3/4] 阶段 B: 等所有车充电完毕 (每 3s 查状态, 最多 {args.max_wait_rounds} 轮) ...")
+            # 阶段 B: 等所有车都充电完成；若等候区还有车，继续按当前策略触发调度。
+            print(f"  [STEP 3/4] 阶段 B: 等所有车充电完毕 (每 3s 查状态并补触发调度, 最多 {args.max_wait_rounds} 轮) ...")
             for round_i in range(1, args.max_wait_rounds + 1):
                 await asyncio.sleep(3.0)
+                if current_policy == "batch_min_total":
+                    await tc.dispatch_batch()
+                else:
+                    await tc.dispatch_fifo()
+                waiting_info = await tc.get_waiting()
+                waiting_count = (len(waiting_info.get("fast_waiting", []))
+                                  + len(waiting_info.get("slow_waiting", [])))
                 # 查询所有订单
                 r = await tc.client.get("/api/admin/orders",
                                          headers=tc._h_admin())
@@ -473,7 +483,7 @@ async def main_async(args):
                 n_charging = sum(1 for o in orders if o.get("status") == "CHARGING")
                 n_other = n_total - n_completed - n_charging
                 print(f"  [等待轮次 {round_i:2d}] {n_completed}/{n_total} 已完成, "
-                      f"{n_charging} 充电中, {n_other} 其他")
+                      f"{n_charging} 充电中, {n_other} 其他, 等候区 {waiting_count} 辆")
                 if n_total > 0 and n_completed == n_total:
                     print(f"  [STEP 3/4] 阶段 B 完成: 所有 {n_total} 辆车均已充电完毕")
                     break
@@ -511,6 +521,16 @@ async def main_async(args):
             finish = info.get("finished_at") or "-"
             print(f"  {vid:<6}{pile:<6}{status:<12}{kwh:<12.2f}{start:<22}{finish:<22}")
 
+        final_waiting = {"fast_waiting": [], "slow_waiting": []}
+        try:
+            tc2 = G9Client(f"http://127.0.0.1:{port}")
+            await tc2.start()
+            tc2.admin_token = tc.admin_token if 'tc' in locals() else ""
+            final_waiting = await tc2.get_waiting()
+            await tc2.close()
+        except Exception:
+            pass
+
         n_completed = sum(1 for v in completion_map.values()
                           if v.get("status") == "COMPLETED")
         n_charging = sum(1 for v in completion_map.values()
@@ -519,6 +539,9 @@ async def main_async(args):
         print(f"\n  汇总: {len(completion_map)} 辆车, "
               f"{n_completed} 已完成, {n_charging} 充电中, "
               f"{n_in_pile} 已分配到桩")
+        waiting_left = (len(final_waiting.get("fast_waiting", []))
+                        + len(final_waiting.get("slow_waiting", [])))
+        print(f"       等候区剩余: {waiting_left} 辆")
 
         # ====== BATCH vs SPT 顺序对比 (分析 BATCH 实际效果) ======
         # 调度器在每轮分派时:
@@ -574,11 +597,11 @@ async def main_async(args):
         print("        (修改 _find_optimal_pile 会破坏 G8, 故 G9 只优化新增调度)")
         print()
         print("  ┌─ BATCH vs FIFO 关键差异 ─────────────────────────┐")
-        print("  │ 第 1 轮调度: 3 fast 桩腾出 2 槽 (F1, F3), 等候区 5 辆│")
-        print("  │   BATCH 选最小 2 辆: V18(5)→F1, V17(10)→F3      │")
-        print("  │   FIFO 选最先 2 辆: V16(25)→F1, V17(10)→F3       │")
+        print("  │ 第 1 轮调度: 3 fast 桩各腾出 1 槽, 等候区 5 辆       │")
+        print("  │   BATCH 选较小 3 辆: V18(5), V17(10), V19(12)     │")
+        print("  │   FIFO 选最先 3 辆: V16(25), V17(10), V18(5)      │")
         print("  │                                                     │")
-        print("  │   F1 的差: V18(5) 替换 V16(25), 充 20kWh 少 0.66h │")
+        print("  │   关键差异: V19(12) 会先于 V16(25) 进入充电区       │")
         print("  │   这就是 BATCH 的核心优势: 小 kWh 优先进桩          │")
         print("  └─────────────────────────────────────────────────────┘")
 
@@ -592,6 +615,7 @@ async def main_async(args):
                 "completed": n_completed,
                 "charging": n_charging,
                 "in_pile": n_in_pile,
+                "waiting_left": waiting_left,
             }
         }
         out = PROJECT_ROOT / "scripts" / "g9_results.json"
@@ -610,7 +634,7 @@ async def main_async(args):
         print(f"    日志: server_g9.log")
         print()
         print(f"  [车辆端] 打开 {url.replace('admin', '')} 或 {url.split('/admin')[0]}/")
-        print(f"           输入 V1 (或 V2..V11) 注册, 可查看该车的账单 + 详单")
+        print(f"           输入 V1 (或 V2..V24) 注册, 可查看该车的账单 + 详单")
         print(f"           (前端每 3 秒自动刷新详单)")
         print()
         print(f"  [账单界面] 报表 / 订单管理 / 详单 Tab 都会每 3 秒自动刷新")
@@ -641,8 +665,8 @@ def main():
                    help="服务器端口 (默认8000)")
     p.add_argument("--no-browser", action="store_true",
                    help="不自动打开浏览器 (调试用)")
-    p.add_argument("--max-dispatch-rounds", type=int, default=15,
-                   help="阶段 A 调度循环最多跑多少轮 (默认 15)")
+    p.add_argument("--max-dispatch-rounds", type=int, default=30,
+                   help="阶段 A 调度循环最多跑多少轮 (默认 30)")
     p.add_argument("--max-wait-rounds", type=int, default=40,
                    help="阶段 B 等待所有车完成最多跑多少轮 (每轮 3s, 默认 40 = 120s)")
     args = p.parse_args()

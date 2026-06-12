@@ -266,19 +266,14 @@ class SmartScheduler:
     async def submit_request(self, request: ChargeRequest,
                              user_id: Optional[int] = None) -> dict:
         async with self.lock:
-            # 容量检查: 所有桩队列中的车 + 等候区中的车
-            cars_in_piles = sum(len(p.queue) for p in self.piles)
+            # 等候区容量只约束尚未进入充电区的车辆；桩内队列容量由各桩
+            # max_queue_length 单独控制。G9 场景会先填满桩内车位，再接纳
+            # waiting_area_size 辆车进入等候区。
             cars_in_waiting = (
                 len(self.fast_waiting) + len(self.slow_waiting)
                 + len(self.pending_requests)
                 + len(self.fast_fault_waiting) + len(self.slow_fault_waiting)
             )
-            total_cars = cars_in_piles + cars_in_waiting
-
-            if total_cars >= self.waiting_capacity:
-                return {"status": "rejected", "message": "系统已满，拒绝接纳",
-                        "order_id": None, "queue_number": None,
-                        "queue_position": None, "assigned_pile": None}
 
             current_vtime = self.clock.get_time()
             requested_start_time = (
@@ -286,8 +281,6 @@ class SmartScheduler:
                 if request.requested_start_time is not None
                 else current_vtime
             )
-
-            queue_number = self._next_queue_number(request.charge_type)
 
             # 查询车辆电池容量，限制充电量不超过最大可充量
             battery_capacity = self.battery_capacity  # 配置默认值
@@ -310,6 +303,33 @@ class SmartScheduler:
                         "queue_position": None, "assigned_pile": None}
 
             actual_requested = min(request.requested_kwh, max_chargeable)
+
+            # 先判断本次请求的落点，避免在等候区已满时创建悬空订单。
+            # 【FIFO 修正】只有在该类型等候区为空且无故障队列时才允许直接进桩,
+            # 否则新车必须排到等候区末尾, 由 dispatch_watcher 按 FIFO 叫号.
+            # 这符合详细需求"选取等候区...第一辆车进入充电区"的语义.
+            same_type_waiting = (self.fast_waiting
+                                 if request.charge_type == "Fast"
+                                 else self.slow_waiting)
+            optimal_pile = None
+            if (requested_start_time <= current_vtime
+                    and not self._has_fault_waiting()
+                    and len(same_type_waiting) == 0):
+                optimal_pile = self._find_optimal_pile(
+                    request.charge_type, actual_requested)
+
+            will_enter_waiting = (
+                requested_start_time > current_vtime or optimal_pile is None
+            )
+            if will_enter_waiting and cars_in_waiting >= self.waiting_capacity:
+                return {"status": "rejected",
+                        "message": "等候区已满，拒绝接纳",
+                        "order_id": None,
+                        "queue_number": None,
+                        "queue_position": None,
+                        "assigned_pile": None}
+
+            queue_number = self._next_queue_number(request.charge_type)
 
             # 创建数据库订单
             async with AsyncSessionLocal() as session:
@@ -357,19 +377,6 @@ class SmartScheduler:
                     "queue_position": len(self.pending_requests),
                     "assigned_pile": None,
                 }
-
-            # 尝试直接分配到最优桩队列
-            # 【FIFO 修正】只有在该类型等候区为空且无故障队列时才允许直接进桩,
-            # 否则新车必须排到等候区末尾, 由 dispatch_watcher 按 FIFO 叫号.
-            # 这符合详细需求"选取等候区...第一辆车进入充电区"的语义.
-            same_type_waiting = (self.fast_waiting
-                                 if request.charge_type == "Fast"
-                                 else self.slow_waiting)
-            optimal_pile = None
-            if (not self._has_fault_waiting()
-                    and len(same_type_waiting) == 0):
-                optimal_pile = self._find_optimal_pile(
-                    request.charge_type, actual_requested)
 
             if optimal_pile is not None:
                 await self._assign_to_pile_queue(
@@ -1625,7 +1632,7 @@ class SmartScheduler:
         return None
 
     def get_waiting_area(self) -> dict:
-        """获取等候区车辆信息（按优先级降序排列）"""
+        """获取等候区车辆信息（按真实队列顺序展示）"""
         current_vtime = self.clock.get_time()
 
         def _build_item(item, charge_type):
@@ -1654,15 +1661,11 @@ class SmartScheduler:
                 "current_vehicle_kwh": current_kwh,
             }
 
-        # 按优先级降序输出（仅展示，不修改内部 waiting_list）
-        sorted_fast = self._sorted_by_priority(self.fast_waiting, current_vtime)
-        sorted_slow = self._sorted_by_priority(self.slow_waiting, current_vtime)
-
         return {
             "pending": [_build_item(i, i["charge_type"])
                         for i in self.pending_requests],
-            "fast_waiting": [_build_item(i, "Fast") for i in sorted_fast],
-            "slow_waiting": [_build_item(i, "Slow") for i in sorted_slow],
+            "fast_waiting": [_build_item(i, "Fast") for i in self.fast_waiting],
+            "slow_waiting": [_build_item(i, "Slow") for i in self.slow_waiting],
         }
 
     # ------------------------------------------------------------------

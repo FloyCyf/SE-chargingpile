@@ -76,21 +76,21 @@ G8_EVENTS = [
     ("06:20", "A", "V2",  "O", 0),    # V2 取消充电 (已充2.5度)
     ("06:25", "A", "V4",  "T", 20),
     ("06:30", "A", "V5",  "T", 20),
-    ("06:35", "A", "V6",  "T", 20),
-    ("06:40", "A", "V7",  "T", 10),
-    ("06:45", "A", "V8",  "F", 90),
-    ("06:50", "A", "V9",  "F", 30),
-    ("06:55", "A", "V10", "T", 10),
-    ("07:00", "A", "V11", "F", 60),
-    ("07:05", "A", "V12", "T", 10),
-    ("07:10", "A", "V13", "T", 7.5),
-    ("07:15", "A", "V14", "F", 75),
-    ("07:20", "A", "V15", "F", 45),
-    ("07:30", "A", "V16", "T", 5),
-    ("07:40", "A", "V17", "T", 15),
-    ("07:45", "A", "V18", "T", 20),
-    ("07:50", "A", "V19", "T", 25),
-    ("08:00", "A", "V20", "F", 30),
+    ("06:40", "A", "V6",  "T", 20),
+    ("06:50", "A", "V7",  "T", 10),
+    ("07:00", "A", "V8",  "F", 90),
+    ("07:10", "A", "V9",  "F", 30),
+    ("07:15", "A", "V10", "T", 10),
+    ("07:20", "A", "V11", "F", 60),
+    ("07:25", "A", "V12", "T", 10),
+    ("07:30", "A", "V13", "T", 7.5),
+    ("07:35", "A", "V14", "F", 75),
+    ("07:40", "A", "V15", "F", 45),
+    ("08:00", "A", "V16", "T", 5),
+    ("08:20", "A", "V17", "T", 15),
+    ("08:30", "A", "V18", "T", 20),
+    ("08:35", "A", "V19", "T", 25),
+    ("09:00", "A", "V20", "F", 30),
     # ---- 取消请求 (A, O, 0) ----
     ("09:10", "A", "V7",  "O", 0),    # V7 取消 (未充电, 无账单)
     ("09:20", "A", "V11", "O", 0),    # V11 取消 (已充35度)
@@ -98,10 +98,10 @@ G8_EVENTS = [
     ("09:35", "A", "V20", "O", 0),    # V20 取消 (已充7.5度)
     # ---- 新充电请求 ----
     ("09:50", "A", "V21", "F", 30),
-    ("09:55", "A", "V22", "T", 10),
+    ("10:00", "A", "V22", "T", 10),
     # ---- 变更请求 (C) ----
     ("10:05", "C", "V19", "F", 25),   # V19 慢充→快充, 25度
-    ("10:10", "C", "V21", "F", 10),   # V21 改请求10度 (已充满→完成)
+    ("10:10", "C", "V21", "F", 10),   # 老师原始用例: 充电区禁改, 脚本回退为取消结算
     ("10:20", "C", "V22", "F", 10),   # V22 慢充→快充, 10度
     # ---- 充电桩故障 (B) ----
     ("10:30", "B", "T1",  "O", 60),   # T1 故障60分钟
@@ -123,7 +123,7 @@ EXPECTED_BILLS = {
             "actual_kwh": 60,   "total_fee": 82.5,
             "note": "谷时+平时"},
     "V4":  {"final_status": "COMPLETED", "charge_type": "Slow",
-            "actual_kwh": 20,   "total_fee": 28.25,
+            "actual_kwh": 20,   "total_fee": 28.26,
             "note": "谷时+平时"},
     "V5":  {"final_status": "COMPLETED", "charge_type": "Slow",
             "actual_kwh": 20,   "total_fee": 31.25,
@@ -144,8 +144,8 @@ EXPECTED_BILLS = {
             "actual_kwh": 10,   "total_fee": 18.0,
             "note": "T1故障队列→T2"},
     "V11": {"final_status": "CANCELLED", "charge_type": "Fast",
-            "actual_kwh": 44,   "total_fee": 66.0,
-            "note": "部分结算(取消时已充44度)"},
+            "actual_kwh": 35,   "total_fee": 52.5,
+            "note": "部分结算(取消时已充35度)"},
     "V12": {"final_status": "COMPLETED", "charge_type": "Slow",
             "actual_kwh": 10,   "total_fee": 18.0,
             "note": "纯峰时"},
@@ -167,24 +167,24 @@ EXPECTED_BILLS = {
     "V18": {"final_status": "CANCELLED", "charge_type": "Slow",
             "actual_kwh": 0,    "total_fee": None,
             "note": "未充电取消"},
-    "V19": {"final_status": "FAULTED", "charge_type": "Fast",
-            "actual_kwh": 4,    "total_fee": 7.2,
-            "note": "慢充→快充变更, F1故障中断"},
+    "V19": {"final_status": "COMPLETED", "charge_type": "Fast",
+            "actual_kwh": 25,   "total_fee": 45.0,
+            "note": "慢充等候区→快充等候区, 后续在F3完成"},
     "V20": {"final_status": "CANCELLED", "charge_type": "Fast",
             "actual_kwh": 7.5,  "total_fee": 11.25,
             "note": "部分结算"},
     "V21": {"final_status": "CANCELLED", "charge_type": "Fast",
             "actual_kwh": 10,   "total_fee": 16.5,
-            "note": "原预期已完成,因系统限制用取消替代"},
+            "note": "充电区不允许修改, 10:10按取消结算"},
     "V22": {"final_status": "COMPLETED", "charge_type": "Fast",
             "actual_kwh": 10,   "total_fee": 18.0,
             "note": "慢充→快充变更"},
 }
 
 # 费用验证容差(元)
-FEE_TOLERANCE = 3.0
+FEE_TOLERANCE = 1.0
 # 电量验证容差(度)
-KWH_TOLERANCE = 1.0
+KWH_TOLERANCE = 0.5
 
 
 # ============================================================
@@ -719,8 +719,8 @@ class G8TestClient:
 
     # ---- 系统参数 ----
 
-    async def set_system_params(self, waiting_area_size: int = 25):
-        """增大系统容量, 防止车辆被拒绝"""
+    async def set_system_params(self, waiting_area_size: int = 10):
+        """设置系统容量。G8 修正版按等候区 10 车位验收。"""
         resp = await self._retry_request(
             lambda: self.client.put("/api/admin/system-params", json={
                 "waiting_area_size": waiting_area_size,
@@ -890,7 +890,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
         await tc.login_admin()
         await tc.register_test_user()
         await tc.register_vehicles()
-        await tc.set_system_params(waiting_area_size=25)
+        await tc.set_system_params(waiting_area_size=10)
 
         # ---- 3. 设置虚拟时钟 ----
         print("\n[3/7] 设置虚拟时钟...")
@@ -1123,7 +1123,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
                 await tc.login_admin()
                 await tc.register_test_user()
                 await tc.register_vehicles()
-                await tc.set_system_params(waiting_area_size=25)
+                await tc.set_system_params(waiting_area_size=10)
                 print("  重新设置虚拟时钟...")
                 await tc.setup_clock(ratio)
                 await tc.start_clock()
@@ -1145,7 +1145,7 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
                 await tc.login_admin()
                 await tc.register_test_user()
                 await tc.register_vehicles()
-                await tc.set_system_params(waiting_area_size=25)
+                await tc.set_system_params(waiting_area_size=10)
                 print("  重新设置虚拟时钟...")
                 await tc.setup_clock(ratio)
                 await tc.start_clock()
@@ -1172,7 +1172,9 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
             vid = o.get("vehicle_id", "")
             # 一个车辆可能有多个订单(取消后重新请求), 取最新的
             if (vid not in order_map
-                    or o.get("id", 0) > order_map[vid].get("id", 0)):
+                    or o.get("order_id", o.get("id", 0))
+                    > order_map[vid].get("order_id",
+                                         order_map[vid].get("id", 0))):
                 order_map[vid] = o
 
         # 打印被拒绝的车辆
@@ -1222,17 +1224,9 @@ async def run_g8_test(ratio: float, port: int, skip_cleanup: bool,
             if actual_status == exp_status:
                 checks.append(("状态", True, f"{actual_status}"))
             else:
-                # V21 特殊处理: 预期 CANCELLED 但可能 COMPLETED
-                if (vid == "V21"
-                        and actual_status in ("CANCELLED",
-                                              "COMPLETED")):
-                    checks.append(("状态", True,
-                                   f"{actual_status}"
-                                   f"(系统限制,取消/完成均可)"))
-                else:
-                    checks.append(("状态", False,
-                                   f"预期{exp_status}, "
-                                   f"实际{actual_status}"))
+                checks.append(("状态", False,
+                               f"预期{exp_status}, "
+                               f"实际{actual_status}"))
 
             # 2. 充电类型检查
             exp_type = expected["charge_type"]

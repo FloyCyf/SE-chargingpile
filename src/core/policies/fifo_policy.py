@@ -15,10 +15,11 @@ from . import Assignment, DispatchPolicy, register_policy
 _PILE_SELECTION_TOLERANCE = 6.0 / 60.0  # 0.10 h
 
 
-def _select_best_pile(piles, charge_type, requested_kwh, virtual_queue_lens):
+def _select_best_pile(piles, charge_type, requested_kwh, virtual_state):
     """
     挑选"完成时刻最早"的桩 (内联自 scheduler._find_optimal_pile).
-    virtual_queue_lens: dict {id(pile): virtual_len} 用于判断该桩是否还有空位.
+    virtual_state: dict {id(pile): {"len": int, "extra_kwh": float}}
+    用于模拟本轮已分配车辆对后续车辆的排队影响.
     返回 (pile, completion_time) 或 None.
     """
     candidates = []
@@ -26,7 +27,8 @@ def _select_best_pile(piles, charge_type, requested_kwh, virtual_queue_lens):
         if p.type != charge_type:
             continue
         original_len = len(p.queue)
-        virtual_len = virtual_queue_lens.get(id(p), original_len)
+        state = virtual_state.get(id(p), {"len": original_len, "extra_kwh": 0.0})
+        virtual_len = state["len"]
         if p.status == "FAULT" or virtual_len >= p.max_queue_length:
             continue
         candidates.append((p, virtual_len))
@@ -38,9 +40,8 @@ def _select_best_pile(piles, charge_type, requested_kwh, virtual_queue_lens):
     best_time = float('inf')
     best_queue_len = float('inf')
     for pile, vlen in candidates:
-        # 用虚拟长度重算 R (越粗略越保守)
-        # 简单近似: 不重算 R, 沿用 pile.remaining_time_hours()
-        wait_time = pile.remaining_time_hours()
+        state = virtual_state.get(id(pile), {"len": len(pile.queue), "extra_kwh": 0.0})
+        wait_time = pile.remaining_time_hours() + state["extra_kwh"] / pile.power
         own_time = requested_kwh / pile.power
         total = wait_time + own_time
         qlen = vlen
@@ -66,17 +67,21 @@ class FIFOPolicy(DispatchPolicy):
     def assign(self, piles, waiting, current_vtime) -> List[Assignment]:
         assignments: List[Assignment] = []
         # 维护一份 "本轮已占用" 的逻辑副本, 不真的改 piles
-        virtual_queue_lens = {id(p): len(p.queue) for p in piles}
+        virtual_state = {
+            id(p): {"len": len(p.queue), "extra_kwh": 0.0}
+            for p in piles
+        }
 
         for car in waiting:
             charge_type = car.get("charge_type", "Slow")
             requested_kwh = car.get("requested_kwh", 0.0)
             result = _select_best_pile(
-                piles, charge_type, requested_kwh, virtual_queue_lens)
+                piles, charge_type, requested_kwh, virtual_state)
             if result is None:
                 continue
             pile, completion = result
-            virtual_queue_lens[id(pile)] += 1
+            virtual_state[id(pile)]["len"] += 1
+            virtual_state[id(pile)]["extra_kwh"] += requested_kwh
             assignments.append(Assignment(
                 pile_id=pile.pile_id,
                 pile_type=pile.type,

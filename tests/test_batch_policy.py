@@ -8,9 +8,11 @@
   4. 类型不匹配的车不进错类型桩
   5. 容量限制: 桩 max_queue_length 不被突破
   6. FIFOPolicy 与原 SmartScheduler._find_optimal_pile 行为一致 (回归测试)
+  7. BATCH 在空位少于等候车辆时会选择总完成时长更短的车辆集合
 """
 import sys
 import os
+import asyncio
 from datetime import datetime
 from types import SimpleNamespace
 from itertools import product
@@ -30,6 +32,7 @@ from src.core.policies.fifo_policy import FIFOPolicy
 from src.core.policies.batch_min_total_policy import (
     BatchMinTotalPolicy, _pile_cost, _batch_dp, _batch_greedy
 )
+from src.api.schemas import ChargeRequest
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +65,55 @@ def make_car(req=10.0, charge_type="Fast", vid="V1", order_id=1,
         "charged_kwh": charged_kwh,
         "order_id": order_id,
         "queue_number": f"X{order_id}",
+    }
+
+
+class _FakeScalarResult:
+    def first(self):
+        return None
+
+
+class _FakeExecuteResult:
+    def scalars(self):
+        return _FakeScalarResult()
+
+
+class _FakeAsyncSession:
+    next_id = 1
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute(self, *_args, **_kwargs):
+        return _FakeExecuteResult()
+
+    def add(self, obj):
+        self.obj = obj
+
+    async def commit(self):
+        return None
+
+    async def refresh(self, obj):
+        obj.id = _FakeAsyncSession.next_id
+        _FakeAsyncSession.next_id += 1
+
+
+def _scheduler_config(waiting_area_size=10, pile_queue_length=3):
+    return {
+        'system': {
+            'fast_pile_count': 3,
+            'slow_pile_count': 2,
+            'waiting_area_size': waiting_area_size,
+            'pile_queue_length': pile_queue_length,
+        },
+        'charging': {'fast_power': 30.0, 'slow_power': 10.0},
+        'billing': {'battery_capacity_kwh': 60.0,
+                    'service_fee_rate': 0.8},
+        'simulation': {'virtual_minutes_per_real_second': 1},
+        'priority': {},
     }
 
 
@@ -182,6 +234,45 @@ def test_dp_no_worse_than_fifo():
     _, cost_fifo = run_policy_and_cost(fifo, piles, cars)
     _, cost_dp = run_policy_and_cost(dp, piles, cars)
     assert cost_dp <= cost_fifo + 1e-6
+
+
+def test_batch_selects_shorter_jobs_when_slots_are_limited():
+    """1 个空位 + 多辆等待车时, BATCH 应选择完成时长最短的车, 不按 FIFO。"""
+    piles = [make_pile("F1", max_queue_length=1, queue=[])]
+    cars = [
+        make_car(req=25, vid="V16", order_id=16),
+        make_car(req=10, vid="V17", order_id=17),
+        make_car(req=5, vid="V18", order_id=18),
+    ]
+
+    fifo_assignments = FIFOPolicy().assign(piles, cars, datetime.now())
+    batch_assignments = BatchMinTotalPolicy(use_dp=True).assign(
+        piles, cars, datetime.now())
+
+    assert [a.car["vehicle_id"] for a in fifo_assignments] == ["V16"]
+    assert [a.car["vehicle_id"] for a in batch_assignments] == ["V18"]
+
+
+def test_g9_first_fast_batch_prefers_three_shortest_waiting_cars():
+    """G9 第一轮 3 个快充空位应叫 V18/V17/V19, 而不是 FIFO 的 V16/V17/V18。"""
+    piles = [
+        make_pile("F1", queue=[make_car(req=15), make_car(req=20)]),
+        make_pile("F2", queue=[make_car(req=12), make_car(req=18)]),
+        make_pile("F3", queue=[make_car(req=10), make_car(req=15)]),
+    ]
+    cars = [
+        make_car(req=25, vid="V16", order_id=16),
+        make_car(req=10, vid="V17", order_id=17),
+        make_car(req=5, vid="V18", order_id=18),
+        make_car(req=12, vid="V19", order_id=19),
+        make_car(req=30, vid="V20", order_id=20),
+    ]
+
+    batch = BatchMinTotalPolicy(use_dp=True).assign(piles, cars, datetime.now())
+    fifo = FIFOPolicy().assign(piles, cars, datetime.now())
+
+    assert {a.car["vehicle_id"] for a in batch} == {"V17", "V18", "V19"}
+    assert {a.car["vehicle_id"] for a in fifo} == {"V16", "V17", "V18"}
 
 
 # ---------------------------------------------------------------------------
@@ -327,3 +418,101 @@ def test_pile_cost_spt_optimal():
     cost_a = _pile_cost([5.0, 50.0], R, power)
     cost_b = _pile_cost([5.0, 100.0], R, power)
     assert cost_b > cost_a
+
+
+# ---------------------------------------------------------------------------
+#  10. G9 回归: 桩内车位不占用等候区容量
+# ---------------------------------------------------------------------------
+
+def test_submit_allows_waiting_after_pile_slots_are_full(monkeypatch):
+    """G9 先填满 5 桩*3 车位后, 仍应允许车辆进入等候区。"""
+    from src.core import scheduler as scheduler_mod
+    from src.core.scheduler import SmartScheduler
+
+    _FakeAsyncSession.next_id = 1
+    monkeypatch.setattr(
+        scheduler_mod, "AsyncSessionLocal", lambda: _FakeAsyncSession())
+
+    sched = SmartScheduler(_scheduler_config(
+        waiting_area_size=10, pile_queue_length=3))
+
+    async def fake_assign(pile, queue_item, _vtime):
+        pile.queue.append(queue_item)
+        if len(pile.queue) == 1:
+            pile.status = "CHARGING"
+
+    monkeypatch.setattr(sched, "_assign_to_pile_queue", fake_assign)
+
+    async def scenario():
+        phase1 = (
+            [("Fast", f"FILLF{i}") for i in range(1, 10)]
+            + [("Slow", f"FILLT{i}") for i in range(1, 7)]
+        )
+        for charge_type, vehicle_id in phase1:
+            result = await sched.submit_request(
+                ChargeRequest(vehicle_id=vehicle_id,
+                              charge_type=charge_type,
+                              requested_kwh=10.0))
+            assert result["status"] == "success"
+            assert result["assigned_pile"] is not None
+
+        assert sum(len(p.queue) for p in sched.piles) == 15
+        assert len(sched.fast_waiting) + len(sched.slow_waiting) == 0
+
+        phase2 = (
+            [("Fast", f"WAITF{i}") for i in range(1, 6)]
+            + [("Slow", f"WAITT{i}") for i in range(1, 5)]
+        )
+        for charge_type, vehicle_id in phase2:
+            result = await sched.submit_request(
+                ChargeRequest(vehicle_id=vehicle_id,
+                              charge_type=charge_type,
+                              requested_kwh=10.0))
+            assert result["status"] == "success"
+            assert result["assigned_pile"] is None
+
+        assert len(sched.fast_waiting) == 5
+        assert len(sched.slow_waiting) == 4
+        assert sched.get_system_status()["fast_waiting_count"] == 5
+        assert sched.get_waiting_area()["fast_waiting"][0]["vehicle_id"] == "WAITF1"
+
+    asyncio.run(scenario())
+
+
+def test_submit_rejects_only_when_waiting_area_itself_is_full(monkeypatch):
+    """等候区满时拒绝新等候车辆, 且不消耗排队号。"""
+    from src.core import scheduler as scheduler_mod
+    from src.core.scheduler import SmartScheduler
+
+    _FakeAsyncSession.next_id = 1
+    monkeypatch.setattr(
+        scheduler_mod, "AsyncSessionLocal", lambda: _FakeAsyncSession())
+
+    sched = SmartScheduler(_scheduler_config(
+        waiting_area_size=1, pile_queue_length=1))
+
+    async def fake_assign(pile, queue_item, _vtime):
+        pile.queue.append(queue_item)
+        if len(pile.queue) == 1:
+            pile.status = "CHARGING"
+
+    monkeypatch.setattr(sched, "_assign_to_pile_queue", fake_assign)
+
+    async def scenario():
+        await sched.submit_request(ChargeRequest(
+            vehicle_id="A", charge_type="Fast", requested_kwh=10.0))
+        await sched.submit_request(ChargeRequest(
+            vehicle_id="B", charge_type="Fast", requested_kwh=10.0))
+        await sched.submit_request(ChargeRequest(
+            vehicle_id="C", charge_type="Fast", requested_kwh=10.0))
+        await sched.submit_request(ChargeRequest(
+            vehicle_id="D", charge_type="Fast", requested_kwh=10.0))
+        result = await sched.submit_request(ChargeRequest(
+            vehicle_id="E", charge_type="Fast", requested_kwh=10.0))
+
+        assert result["status"] == "rejected"
+        assert result["queue_number"] is None
+        assert len(sched.fast_waiting) == 1
+        assert sched.fast_counter == 4
+
+    asyncio.run(scenario())
